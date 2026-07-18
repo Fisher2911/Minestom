@@ -2,10 +2,10 @@ package net.minestom.server.entity.metadata;
 
 import net.minestom.server.entity.Entity;
 import net.minestom.server.entity.MetadataHolder;
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class PathfinderMobMeta extends MobMeta {
-    protected PathfinderMobMeta(@NotNull Entity entity, @NotNull MetadataHolder metadata) {
+    protected PathfinderMobMeta(@Nullable Entity entity, MetadataHolder metadata) {
         super(entity, metadata);
     }
 

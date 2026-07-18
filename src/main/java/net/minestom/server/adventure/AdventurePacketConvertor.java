@@ -1,7 +1,6 @@
 package net.minestom.server.adventure;
 
 import it.unimi.dsi.fastutil.objects.Object2IntArrayMap;
-import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.sound.Sound;
@@ -10,39 +9,51 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.title.Title;
 import net.kyori.adventure.title.TitlePart;
+import net.minestom.server.coordinate.Vec;
 import net.minestom.server.entity.Entity;
+import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.network.packet.server.ServerPacket;
 import net.minestom.server.network.packet.server.play.*;
 import net.minestom.server.sound.SoundEvent;
 import net.minestom.server.utils.TickUtils;
-import org.jetbrains.annotations.NotNull;
+import net.minestom.server.utils.collection.ObjectArray;
 
 import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Utility methods to convert adventure enums to their packet values.
  */
-public class AdventurePacketConvertor {
-    private static final Object2IntMap<NamedTextColor> NAMED_TEXT_COLOR_ID_MAP = new Object2IntArrayMap<>(16);
+public final class AdventurePacketConvertor {
+    private static final Map<NamedTextColor, Integer> NAMED_TEXT_COLOR_ID_MAP;
+    private static final List<NamedTextColor> ID_NAMED_TEXT_COLOR_MAP;
 
     static {
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.BLACK, 0);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.DARK_BLUE, 1);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.DARK_GREEN, 2);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.DARK_AQUA, 3);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.DARK_RED, 4);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.DARK_PURPLE, 5);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.GOLD, 6);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.GRAY, 7);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.DARK_GRAY, 8);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.BLUE, 9);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.GREEN, 10);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.AQUA, 11);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.RED, 12);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.LIGHT_PURPLE, 13);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.YELLOW, 14);
-        NAMED_TEXT_COLOR_ID_MAP.put(NamedTextColor.WHITE, 15);
+        Object2IntArrayMap<NamedTextColor> COLOR_ID_MAP = new Object2IntArrayMap<>(16);
+        COLOR_ID_MAP.put(NamedTextColor.BLACK, 0);
+        COLOR_ID_MAP.put(NamedTextColor.DARK_BLUE, 1);
+        COLOR_ID_MAP.put(NamedTextColor.DARK_GREEN, 2);
+        COLOR_ID_MAP.put(NamedTextColor.DARK_AQUA, 3);
+        COLOR_ID_MAP.put(NamedTextColor.DARK_RED, 4);
+        COLOR_ID_MAP.put(NamedTextColor.DARK_PURPLE, 5);
+        COLOR_ID_MAP.put(NamedTextColor.GOLD, 6);
+        COLOR_ID_MAP.put(NamedTextColor.GRAY, 7);
+        COLOR_ID_MAP.put(NamedTextColor.DARK_GRAY, 8);
+        COLOR_ID_MAP.put(NamedTextColor.BLUE, 9);
+        COLOR_ID_MAP.put(NamedTextColor.GREEN, 10);
+        COLOR_ID_MAP.put(NamedTextColor.AQUA, 11);
+        COLOR_ID_MAP.put(NamedTextColor.RED, 12);
+        COLOR_ID_MAP.put(NamedTextColor.LIGHT_PURPLE, 13);
+        COLOR_ID_MAP.put(NamedTextColor.YELLOW, 14);
+        COLOR_ID_MAP.put(NamedTextColor.WHITE, 15);
+
+        ObjectArray<NamedTextColor> array = ObjectArray.singleThread(16);
+        COLOR_ID_MAP.forEach((key, value) -> array.set(value, key));
+
+        NAMED_TEXT_COLOR_ID_MAP = Map.copyOf(COLOR_ID_MAP);
+        ID_NAMED_TEXT_COLOR_MAP = array.toList();
     }
 
     /**
@@ -51,7 +62,7 @@ public class AdventurePacketConvertor {
      * @param overlay the overlay
      * @return the value
      */
-    public static int getBossBarOverlayValue(@NotNull BossBar.Overlay overlay) {
+    public static int getBossBarOverlayValue(BossBar.Overlay overlay) {
         return overlay.ordinal();
     }
 
@@ -61,10 +72,10 @@ public class AdventurePacketConvertor {
      * @param flags the flags
      * @return the value
      */
-    public static byte getBossBarFlagValue(@NotNull Collection<BossBar.Flag> flags) {
+    public static byte getBossBarFlagValue(Collection<BossBar.Flag> flags) {
         byte val = 0x0;
         for (BossBar.Flag flag : flags) {
-            val |= flag.ordinal();
+            val |= (byte) (1 << flag.ordinal());
         }
         return val;
     }
@@ -75,7 +86,7 @@ public class AdventurePacketConvertor {
      * @param color the color
      * @return the value
      */
-    public static int getBossBarColorValue(@NotNull BossBar.Color color) {
+    public static int getBossBarColorValue(BossBar.Color color) {
         return color.ordinal();
     }
 
@@ -85,7 +96,7 @@ public class AdventurePacketConvertor {
      * @param source the source
      * @return the value
      */
-    public static int getSoundSourceValue(@NotNull Sound.Source source) {
+    public static int getSoundSourceValue(Sound.Source source) {
         return source.ordinal();
     }
 
@@ -95,8 +106,18 @@ public class AdventurePacketConvertor {
      * @param color the color
      * @return the int value
      */
-    public static int getNamedTextColorValue(@NotNull NamedTextColor color) {
-        return NAMED_TEXT_COLOR_ID_MAP.getInt(color);
+    public static int getNamedTextColorValue(NamedTextColor color) {
+        return NAMED_TEXT_COLOR_ID_MAP.get(color);
+    }
+
+    /**
+     * Gets the named text color from the int value, see {@link #getNamedTextColorValue(NamedTextColor)}.
+     *
+     * @param id the color value
+     * @return the int value
+     */
+    public static NamedTextColor getNamedTextColor(int id) {
+        return ID_NAMED_TEXT_COLOR_MAP.get(id);
     }
 
     /**
@@ -109,12 +130,12 @@ public class AdventurePacketConvertor {
      * @param z     the z coordinate
      * @return the sound packet
      */
-    public static @NotNull ServerPacket createSoundPacket(@NotNull Sound sound, double x, double y, double z) {
+    public static ServerPacket createSoundPacket(Sound sound, double x, double y, double z) {
         SoundEvent minestomSound = SoundEvent.fromKey(sound.name());
         if (minestomSound == null) minestomSound = SoundEvent.of(sound.name(), null);
 
         final long seed = sound.seed().orElse(ThreadLocalRandom.current().nextLong());
-        return new SoundEffectPacket(minestomSound, sound.source(), (int) x, (int) y, (int) z, sound.volume(), sound.pitch(), seed);
+        return new SoundEffectPacket(minestomSound, sound.source(), new Vec(x, y, z), sound.volume(), sound.pitch(), seed);
     }
 
     /**
@@ -125,7 +146,7 @@ public class AdventurePacketConvertor {
      * @param emitter the emitter, must be an {@link Entity}
      * @return the sound packet
      */
-    public static @NotNull ServerPacket createSoundPacket(@NotNull Sound sound, Sound.@NotNull Emitter emitter) {
+    public static ServerPacket createSoundPacket(Sound sound, Sound.Emitter emitter) {
         if (emitter == Sound.Emitter.self())
             throw new IllegalArgumentException("you must replace instances of Emitter.self() before calling this method");
         if (!(emitter instanceof Entity entity))
@@ -147,7 +168,7 @@ public class AdventurePacketConvertor {
      * @deprecated Use {@link #createSoundPacket(Sound, Sound.Emitter)}
      */
     @Deprecated(forRemoval = true)
-    public static ServerPacket createEntitySoundPacket(@NotNull Sound sound, @NotNull Entity entity) {
+    public static ServerPacket createEntitySoundPacket(Sound sound, Entity entity) {
         return createSoundPacket(sound, entity);
     }
 
@@ -157,7 +178,7 @@ public class AdventurePacketConvertor {
      * @param stop the sound stop
      * @return the sound stop packet
      */
-    public static ServerPacket createSoundStopPacket(@NotNull SoundStop stop) {
+    public static ServerPacket createSoundStopPacket(SoundStop stop) {
         byte flags = 0x0;
         Sound.Source source = stop.source();
         String sound = null;
@@ -181,7 +202,7 @@ public class AdventurePacketConvertor {
      * @param <T>   the type of the part
      * @return the title packet
      */
-    public static <T> @NotNull ServerPacket createTitlePartPacket(@NotNull TitlePart<T> part, @NotNull T value) {
+    public static <T> ServerPacket createTitlePartPacket(TitlePart<T> part, T value) {
         if (part == TitlePart.TITLE) {
             return new SetTitleTextPacket((Component) value);
         } else if (part == TitlePart.SUBTITLE) {

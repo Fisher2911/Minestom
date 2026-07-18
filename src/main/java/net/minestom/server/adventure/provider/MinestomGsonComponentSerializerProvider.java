@@ -1,29 +1,29 @@
 package net.minestom.server.adventure.provider;
 
-import java.util.function.Consumer;
-
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
-import org.jetbrains.annotations.NotNull;
+import net.kyori.adventure.text.serializer.json.JSONOptions;
+
+import java.util.function.Consumer;
 
 @SuppressWarnings("UnstableApiUsage") // we are permitted to provide this
 public final class MinestomGsonComponentSerializerProvider implements GsonComponentSerializer.Provider {
     @Override
-    public @NotNull GsonComponentSerializer gson() {
+    public GsonComponentSerializer gson() {
         return GsonComponentSerializer.builder()
                 .legacyHoverEventSerializer(NBTLegacyHoverEventSerializer.INSTANCE)
                 .build();
     }
 
     @Override
-    public @NotNull GsonComponentSerializer gsonLegacy() {
+    public GsonComponentSerializer gsonLegacy() {
         return GsonComponentSerializer.builder()
                 .legacyHoverEventSerializer(NBTLegacyHoverEventSerializer.INSTANCE)
-                .downsampleColors()
+                .editOptions(features -> features.value(JSONOptions.EMIT_RGB, false))
                 .build();
     }
 
     @Override
-    public @NotNull Consumer<GsonComponentSerializer.Builder> builder() {
-        return builder -> {}; // we don't need to touch the builder here
+    public Consumer<GsonComponentSerializer.Builder> builder() {
+        return _ -> {}; // we don't need to touch the builder here
     }
 }

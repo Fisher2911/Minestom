@@ -2,11 +2,11 @@ package net.minestom.server.entity.metadata.other;
 
 import net.minestom.server.entity.Entity;
 import net.minestom.server.entity.MetadataHolder;
-import net.minestom.server.entity.metadata.EntityMeta;
-import org.jetbrains.annotations.NotNull;
+import net.minestom.server.entity.metadata.animal.LlamaMeta;
+import org.jetbrains.annotations.Nullable;
 
-public class TraderLlamaMeta extends EntityMeta {
-    public TraderLlamaMeta(@NotNull Entity entity, @NotNull MetadataHolder metadata) {
+public class TraderLlamaMeta extends LlamaMeta {
+    public TraderLlamaMeta(@Nullable Entity entity, MetadataHolder metadata) {
         super(entity, metadata);
     }
 

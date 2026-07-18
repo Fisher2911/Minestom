@@ -5,11 +5,13 @@ import net.kyori.adventure.key.KeyPattern;
 import net.kyori.adventure.util.RGBLike;
 import net.minestom.server.codec.Codec;
 import net.minestom.server.codec.Result;
+import net.minestom.server.codec.StructCodec;
 import net.minestom.server.codec.Transcoder;
 import net.minestom.server.color.AlphaColor;
 import net.minestom.server.color.Color;
 import net.minestom.server.coordinate.Point;
 import net.minestom.server.item.ItemStack;
+import net.minestom.server.item.ItemStackTemplate;
 import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.registry.StaticProtocolObject;
 import net.minestom.server.utils.validate.Check;
@@ -20,50 +22,60 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collection;
 import java.util.Objects;
 
+import static net.minestom.server.instance.block.Block.STATE_STRUCT_CODEC;
 import static net.minestom.server.network.NetworkBuffer.VAR_INT;
 import static net.minestom.server.network.NetworkBuffer.VECTOR3D;
 
-public sealed interface Particle extends StaticProtocolObject<Particle>, Particles permits Particle.Block, Particle.BlockMarker,
-        Particle.Dust, Particle.DustColorTransition, Particle.DustPillar, Particle.EntityEffect, Particle.FallingDust,
-        Particle.Item, Particle.SculkCharge, Particle.Shriek, Particle.Simple, Particle.Vibration, Particle.Trail,
-        Particle.BlockCrumble, Particle.TintedLeaves {
+public sealed interface Particle extends StaticProtocolObject<Particle>, Particles {
 
-    @NotNull NetworkBuffer.Type<Particle> NETWORK_TYPE = new NetworkBuffer.Type<>() {
+    NetworkBuffer.Type<Particle> NETWORK_TYPE = new NetworkBuffer.Type<>() {
         @Override
-        public void write(@NotNull NetworkBuffer buffer, Particle value) {
+        public void write(NetworkBuffer buffer, Particle value) {
             buffer.write(VAR_INT, value.id());
             value.writeData(buffer);
         }
 
         @Override
-        public Particle read(@NotNull NetworkBuffer buffer) {
+        public Particle read(NetworkBuffer buffer) {
             final int id = buffer.read(VAR_INT);
             final Particle particle = Objects.requireNonNull(fromId(id), () -> "unknown particle id: " + id);
             return particle.readData(buffer);
         }
     };
-    @NotNull Codec<Particle> CODEC = new Codec<>() {
+    Codec<Particle> CODEC = new Codec<>() {
         @Override
-        public @NotNull <D> Result<Particle> decode(@NotNull Transcoder<D> coder, @NotNull D value) {
-            return new Result.Error<>("particles cannot be decoded");
+        public <D> Result<Particle> decode(Transcoder<D> coder, D value) {
+            Result<Transcoder.MapLike<D>> mapResult = coder.getMap(value);
+            if (!(mapResult instanceof Result.Ok(Transcoder.MapLike<D> map)))
+                return mapResult.cast();
+
+            Result<Particle> particleResult = map.getValue("type")
+                    .map(coder::getString).mapResult(ParticleImpl::get);
+            if (!(particleResult instanceof Result.Ok(Particle particle)))
+                return particleResult.cast();
+
+            //noinspection unchecked
+            return (Result<Particle>) particle.codec().decodeFromMap(coder, map);
         }
 
         @Override
-        public @NotNull <D> Result<D> encode(@NotNull Transcoder<D> coder, @Nullable Particle value) {
+        public <D> Result<D> encode(Transcoder<D> coder, @Nullable Particle value) {
             if (value == null) return new Result.Error<>("null");
-            return value.encode(coder);
+
+            //noinspection unchecked
+            return ((StructCodec<@NotNull Particle>) value.codec()).encode(coder, value);
         }
     };
 
-    static @NotNull Collection<@NotNull Particle> values() {
+    static Collection<Particle> values() {
         return ParticleImpl.REGISTRY.values();
     }
 
-    static @Nullable Particle fromKey(@KeyPattern @NotNull String key) {
+    static @Nullable Particle fromKey(@KeyPattern String key) {
         return fromKey(Key.key(key));
     }
 
-    static @Nullable Particle fromKey(@NotNull Key key) {
+    static @Nullable Particle fromKey(Key key) {
         return ParticleImpl.REGISTRY.get(key);
     }
 
@@ -71,41 +83,45 @@ public sealed interface Particle extends StaticProtocolObject<Particle>, Particl
         return ParticleImpl.REGISTRY.get(id);
     }
 
-    @NotNull Particle readData(@NotNull NetworkBuffer reader);
+    Particle readData(NetworkBuffer reader);
 
-    void writeData(@NotNull NetworkBuffer writer);
+    void writeData(NetworkBuffer writer);
 
-    <D> @NotNull Result<D> encode(@NotNull Transcoder<D> coder);
+    StructCodec<? extends Particle> codec();
 
-    record Simple(@NotNull Key key, int id) implements Particle {
+    record Simple(Key key, int id) implements Particle {
+        public static final StructCodec<Simple> CODEC = StructCodec.struct(
+                "type", Codec.KEY, Simple::key,
+                ParticleImpl::get);
 
         @Override
-        public @NotNull Particle readData(@NotNull NetworkBuffer reader) {
+        public Particle readData(NetworkBuffer reader) {
             return this;
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
         }
 
         @Override
-        public <D> @NotNull Result<D> encode(@NotNull Transcoder<D> coder) {
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record Block(@NotNull Key key, int id,
-                 @NotNull net.minestom.server.instance.block.Block block) implements Particle {
+    record Block(Key key, int id, net.minestom.server.instance.block.Block block) implements Particle {
+        public static final StructCodec<Block> CODEC = StructCodec.struct(
+                "type", Codec.KEY, Block::key,
+                "block_state", STATE_STRUCT_CODEC, Block::block,
+                (key, block) -> ParticleImpl.<Block>get(key).withBlock(block));
 
         @Contract(pure = true)
-        public @NotNull Block withBlock(@NotNull net.minestom.server.instance.block.Block block) {
+        public Block withBlock(net.minestom.server.instance.block.Block block) {
             return new Block(key(), id(), block);
         }
 
         @Override
-        public @NotNull Block readData(@NotNull NetworkBuffer reader) {
+        public Block readData(NetworkBuffer reader) {
             short blockState = reader.read(NetworkBuffer.VAR_INT).shortValue();
             var block = net.minestom.server.instance.block.Block.fromStateId(blockState);
             Check.stateCondition(block == null, "Block state " + blockState + " is invalid");
@@ -113,29 +129,29 @@ public sealed interface Particle extends StaticProtocolObject<Particle>, Particl
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(NetworkBuffer.VAR_INT, block.stateId());
         }
 
         @Override
-        public <D> @NotNull Result<D> encode(@NotNull Transcoder<D> coder) {
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("block_state", coder.createString(block.state()))
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record BlockMarker(@NotNull Key key, int id,
-                       @NotNull net.minestom.server.instance.block.Block block) implements Particle {
+    record BlockMarker(Key key, int id, net.minestom.server.instance.block.Block block) implements Particle {
+        public static final StructCodec<BlockMarker> CODEC = StructCodec.struct(
+                "type", Codec.KEY, BlockMarker::key,
+                "block_state", STATE_STRUCT_CODEC, BlockMarker::block,
+                (key, block) -> ParticleImpl.<BlockMarker>get(key).withBlock(block));
 
         @Contract(pure = true)
-        public @NotNull BlockMarker withBlock(@NotNull net.minestom.server.instance.block.Block block) {
+        public BlockMarker withBlock(net.minestom.server.instance.block.Block block) {
             return new BlockMarker(key(), id(), block);
         }
 
         @Override
-        public @NotNull BlockMarker readData(@NotNull NetworkBuffer reader) {
+        public BlockMarker readData(NetworkBuffer reader) {
             short blockState = reader.read(NetworkBuffer.VAR_INT).shortValue();
             var block = net.minestom.server.instance.block.Block.fromStateId(blockState);
             Check.stateCondition(block == null, "Block state " + blockState + " is invalid");
@@ -143,124 +159,122 @@ public sealed interface Particle extends StaticProtocolObject<Particle>, Particl
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(NetworkBuffer.VAR_INT, block.stateId());
         }
 
         @Override
-        public <D> @NotNull Result<D> encode(@NotNull Transcoder<D> coder) {
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("block_state", coder.createString(block.state()))
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record Dust(@NotNull Key key, int id, @NotNull RGBLike color, float scale) implements Particle {
+    record Dust(Key key, int id, RGBLike color, float scale) implements Particle {
+        public static final StructCodec<Dust> CODEC = StructCodec.struct(
+                "type", Codec.KEY, Dust::key,
+                "color", Color.CODEC, Dust::color,
+                "scale", Codec.FLOAT, Dust::scale,
+                (type, color, scale) -> ParticleImpl.<Dust>get(type).withProperties(color, scale));
 
         @Contract(pure = true)
-        public @NotNull Dust withProperties(@NotNull RGBLike color, float scale) {
+        public Dust withProperties(RGBLike color, float scale) {
             return new Dust(key(), id(), color, scale);
         }
 
         @Contract(pure = true)
-        public @NotNull Dust withColor(@NotNull RGBLike color) {
+        public Dust withColor(RGBLike color) {
             return this.withProperties(color, scale);
         }
 
         @Contract(pure = true)
-        public @NotNull Dust withScale(float scale) {
+        public Dust withScale(float scale) {
             return this.withProperties(color, scale);
         }
 
         @Override
-        public @NotNull Dust readData(@NotNull NetworkBuffer reader) {
+        public Dust readData(NetworkBuffer reader) {
             return this.withProperties(reader.read(Color.NETWORK_TYPE), reader.read(NetworkBuffer.FLOAT));
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(Color.NETWORK_TYPE, color);
             writer.write(NetworkBuffer.FLOAT, scale);
         }
 
         @Override
-        public <D> @NotNull Result<D> encode(@NotNull Transcoder<D> coder) {
-            final Result<D> colorResult = Color.CODEC.encode(coder, color);
-            if (!(colorResult instanceof Result.Ok(D colorData)))
-                return colorResult.cast();
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("color", colorData)
-                    .put("scale", coder.createFloat(scale))
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record DustColorTransition(@NotNull Key key, int id, @NotNull RGBLike color,
-                               @NotNull RGBLike transitionColor, float scale) implements Particle {
+    record DustColorTransition(
+            Key key, int id,
+            RGBLike color,
+            RGBLike transitionColor,
+            float scale
+    ) implements Particle {
+        public static final StructCodec<DustColorTransition> CODEC = StructCodec.struct(
+                "type", Codec.KEY, DustColorTransition::key,
+                "from_color", Color.CODEC, DustColorTransition::color,
+                "to_color", Color.CODEC, DustColorTransition::transitionColor,
+                "scale", Codec.FLOAT, DustColorTransition::scale,
+                (type, from, to, scale) ->
+                        ParticleImpl.<DustColorTransition>get(type).withProperties(from, to, scale));
 
         @Contract(pure = true)
-        public @NotNull DustColorTransition withProperties(@NotNull RGBLike color, @NotNull RGBLike transitionColor, float scale) {
+        public DustColorTransition withProperties(RGBLike color, RGBLike transitionColor, float scale) {
             return new DustColorTransition(key, id, color, transitionColor, scale);
         }
 
         @Contract(pure = true)
-        public @NotNull DustColorTransition withColor(@NotNull RGBLike color) {
+        public DustColorTransition withColor(RGBLike color) {
             return this.withProperties(color, transitionColor, scale);
         }
 
         @Contract(pure = true)
-        public @NotNull DustColorTransition withScale(float scale) {
+        public DustColorTransition withScale(float scale) {
             return this.withProperties(color, transitionColor, scale);
         }
 
         @Contract(pure = true)
-        public @NotNull DustColorTransition withTransitionColor(@NotNull RGBLike transitionColor) {
+        public DustColorTransition withTransitionColor(RGBLike transitionColor) {
             return this.withProperties(color, transitionColor, scale);
         }
 
         @Override
-        public @NotNull DustColorTransition readData(@NotNull NetworkBuffer reader) {
+        public DustColorTransition readData(NetworkBuffer reader) {
             return this.withProperties(reader.read(Color.NETWORK_TYPE),
                     reader.read(Color.NETWORK_TYPE),
                     reader.read(NetworkBuffer.FLOAT));
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(Color.NETWORK_TYPE, color);
             writer.write(Color.NETWORK_TYPE, transitionColor);
             writer.write(NetworkBuffer.FLOAT, scale);
         }
 
         @Override
-        public @NotNull <D> Result<D> encode(@NotNull Transcoder<D> coder) {
-            final Result<D> fromColorResult = Color.CODEC.encode(coder, color);
-            if (!(fromColorResult instanceof Result.Ok(D fromColorData)))
-                return fromColorResult.cast();
-            final Result<D> toColorResult = Color.CODEC.encode(coder, transitionColor);
-            if (!(toColorResult instanceof Result.Ok(D toColorData)))
-                return toColorResult.cast();
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("from_color", fromColorData)
-                    .put("to_color", toColorData)
-                    .put("scale", coder.createFloat(scale))
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record DustPillar(@NotNull Key key, int id,
-                      @NotNull net.minestom.server.instance.block.Block block) implements Particle {
+    record DustPillar(Key key, int id, net.minestom.server.instance.block.Block block) implements Particle {
+        public static final StructCodec<DustPillar> CODEC = StructCodec.struct(
+                "type", Codec.KEY, DustPillar::key,
+                "block_state", STATE_STRUCT_CODEC, DustPillar::block,
+                (key, block) -> ParticleImpl.<DustPillar>get(key).withBlock(block));
 
         @Contract(pure = true)
-        public @NotNull DustPillar withBlock(@NotNull net.minestom.server.instance.block.Block block) {
+        public DustPillar withBlock(net.minestom.server.instance.block.Block block) {
             return new DustPillar(key(), id(), block);
         }
 
         @Override
-        public @NotNull DustPillar readData(@NotNull NetworkBuffer reader) {
+        public DustPillar readData(NetworkBuffer reader) {
             short blockState = reader.read(NetworkBuffer.VAR_INT).shortValue();
             var block = net.minestom.server.instance.block.Block.fromStateId(blockState);
             Check.stateCondition(block == null, "Block state " + blockState + " is invalid");
@@ -268,29 +282,29 @@ public sealed interface Particle extends StaticProtocolObject<Particle>, Particl
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(NetworkBuffer.VAR_INT, block.stateId());
         }
 
         @Override
-        public <D> @NotNull Result<D> encode(@NotNull Transcoder<D> coder) {
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("block_state", coder.createString(block.state()))
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record FallingDust(@NotNull Key key, int id,
-                       @NotNull net.minestom.server.instance.block.Block block) implements Particle {
+    record FallingDust(Key key, int id, net.minestom.server.instance.block.Block block) implements Particle {
+        public static final StructCodec<FallingDust> CODEC = StructCodec.struct(
+                "type", Codec.KEY, FallingDust::key,
+                "block_state", STATE_STRUCT_CODEC, FallingDust::block,
+                (key, block) -> ParticleImpl.<FallingDust>get(key).withBlock(block));
 
         @Contract(pure = true)
-        public @NotNull FallingDust withBlock(@NotNull net.minestom.server.instance.block.Block block) {
+        public FallingDust withBlock(net.minestom.server.instance.block.Block block) {
             return new FallingDust(key(), id(), block);
         }
 
         @Override
-        public @NotNull FallingDust readData(@NotNull NetworkBuffer reader) {
+        public FallingDust readData(NetworkBuffer reader) {
             short blockState = reader.read(NetworkBuffer.VAR_INT).shortValue();
             var block = net.minestom.server.instance.block.Block.fromStateId(blockState);
             Check.stateCondition(block == null, "Block state " + blockState + " is invalid");
@@ -298,161 +312,161 @@ public sealed interface Particle extends StaticProtocolObject<Particle>, Particl
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(NetworkBuffer.VAR_INT, block.stateId());
         }
 
         @Override
-        public <D> @NotNull Result<D> encode(@NotNull Transcoder<D> coder) {
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("block_state", coder.createString(block.state()))
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record Item(@NotNull Key key, int id, @NotNull ItemStack item) implements Particle {
+    record Item(Key key, int id, ItemStack item) implements Particle {
+        public static final StructCodec<Item> CODEC = StructCodec.struct(
+                "type", Codec.KEY, Item::key,
+                "item", ItemStackTemplate.CODEC, Item::item,
+                (type, item) -> ParticleImpl.<Item>get(type).withItem(item));
 
         @Contract(pure = true)
-        public @NotNull Item withItem(@NotNull ItemStack item) {
+        public Item withItem(ItemStack item) {
             return new Item(key(), id(), item);
         }
 
         @Override
-        public @NotNull Item readData(@NotNull NetworkBuffer reader) {
-            return this.withItem(reader.read(ItemStack.NETWORK_TYPE));
+        public Item readData(NetworkBuffer reader) {
+            return this.withItem(reader.read(ItemStackTemplate.NETWORK_TYPE));
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
-            writer.write(ItemStack.NETWORK_TYPE, item);
+        public void writeData(NetworkBuffer writer) {
+            writer.write(ItemStackTemplate.NETWORK_TYPE, item);
         }
 
         @Override
-        public @NotNull <D> Result<D> encode(@NotNull Transcoder<D> coder) {
-            final Result<D> itemResult = ItemStack.CODEC.encode(coder, item);
-            if (!(itemResult instanceof Result.Ok(D itemData)))
-                return itemResult.cast();
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("item", itemData)
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record EntityEffect(@NotNull Key key, int id, @NotNull AlphaColor color) implements Particle {
+    record EntityEffect(Key key, int id, AlphaColor color) implements Particle {
+        public static final StructCodec<EntityEffect> CODEC = StructCodec.struct(
+                "type", Codec.KEY, EntityEffect::key,
+                "color", AlphaColor.CODEC, EntityEffect::color,
+                (type, color) -> ParticleImpl.<EntityEffect>get(type).withColor(color));
 
         @Contract(pure = true)
-        public @NotNull EntityEffect withColor(@NotNull AlphaColor color) {
+        public EntityEffect withColor(AlphaColor color) {
             return new EntityEffect(key(), id(), color);
         }
 
         @Contract(pure = true)
-        public @NotNull EntityEffect withColor(@NotNull RGBLike color) {
+        public EntityEffect withColor(RGBLike color) {
             return new EntityEffect(key(), id(), new AlphaColor(1, color));
         }
 
         @Contract(pure = true)
-        public @NotNull EntityEffect withColor(int alpha, @NotNull RGBLike color) {
+        public EntityEffect withColor(int alpha, RGBLike color) {
             return new EntityEffect(key(), id(), new AlphaColor(alpha, color));
         }
 
         @Override
-        public @NotNull EntityEffect readData(@NotNull NetworkBuffer reader) {
+        public EntityEffect readData(NetworkBuffer reader) {
             return withColor(reader.read(AlphaColor.NETWORK_TYPE));
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(AlphaColor.NETWORK_TYPE, color);
         }
 
         @Override
-        public @NotNull <D> Result<D> encode(@NotNull Transcoder<D> coder) {
-            final Result<D> colorResult = AlphaColor.CODEC.encode(coder, color);
-            if (!(colorResult instanceof Result.Ok(D colorData)))
-                return colorResult.cast();
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("color", colorData)
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record SculkCharge(@NotNull Key key, int id, float roll) implements Particle {
+    record SculkCharge(Key key, int id, float roll) implements Particle {
+        public static final StructCodec<SculkCharge> CODEC = StructCodec.struct(
+                "type", Codec.KEY, SculkCharge::key,
+                "roll", Codec.FLOAT, SculkCharge::roll,
+                (type, roll) -> ParticleImpl.<SculkCharge>get(type).withRoll(roll));
 
         @Contract(pure = true)
-        public @NotNull SculkCharge withRoll(float roll) {
+        public SculkCharge withRoll(float roll) {
             return new SculkCharge(key(), id(), roll);
         }
 
         @Override
-        public @NotNull SculkCharge readData(@NotNull NetworkBuffer reader) {
+        public SculkCharge readData(NetworkBuffer reader) {
             return this.withRoll(reader.read(NetworkBuffer.FLOAT));
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(NetworkBuffer.FLOAT, roll);
         }
 
         @Override
-        public @NotNull <D> Result<D> encode(@NotNull Transcoder<D> coder) {
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("roll", coder.createFloat(roll))
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record Shriek(@NotNull Key key, int id, int delay) implements Particle {
+    record Shriek(Key key, int id, int delay) implements Particle {
+        public static final StructCodec<Shriek> CODEC = StructCodec.struct(
+                "type", Codec.KEY, Shriek::key,
+                "delay", Codec.INT, Shriek::delay,
+                (type, delay) -> ParticleImpl.<Shriek>get(type).withDelay(delay));
 
         @Contract(pure = true)
-        public @NotNull Shriek withDelay(int delay) {
+        public Shriek withDelay(int delay) {
             return new Shriek(key(), id(), delay);
         }
 
         @Override
-        public @NotNull Shriek readData(@NotNull NetworkBuffer reader) {
+        public Shriek readData(NetworkBuffer reader) {
             return this.withDelay(reader.read(NetworkBuffer.VAR_INT));
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(NetworkBuffer.VAR_INT, delay);
         }
 
         @Override
-        public @NotNull <D> Result<D> encode(@NotNull Transcoder<D> coder) {
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("delay", coder.createInt(delay))
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record Vibration(@NotNull Key key, int id, @NotNull SourceType sourceType,
-                     @Nullable Point sourceBlockPosition, int sourceEntityId, float sourceEntityEyeHeight,
-                     int travelTicks) implements Particle {
+    record Vibration(
+            Key key, int id,
+            SourceType sourceType,
+            @Nullable Point sourceBlockPosition,
+            int sourceEntityId,
+            float sourceEntityEyeHeight,
+            int travelTicks
+    ) implements Particle {
 
         @Contract(pure = true)
-        public @NotNull Vibration withProperties(@NotNull SourceType sourceType, @Nullable Point sourceBlockPosition,
-                                                 int sourceEntityId, float sourceEntityEyeHeight, int travelTicks) {
+        public Vibration withProperties(SourceType sourceType, @Nullable Point sourceBlockPosition,
+                                        int sourceEntityId, float sourceEntityEyeHeight, int travelTicks) {
             return new Vibration(key(), id(), sourceType, sourceBlockPosition, sourceEntityId, sourceEntityEyeHeight, travelTicks);
         }
 
         @Contract(pure = true)
-        public @NotNull Vibration withSourceBlockPosition(@Nullable Point sourceBlockPosition, int travelTicks) {
+        public Vibration withSourceBlockPosition(@Nullable Point sourceBlockPosition, int travelTicks) {
             return new Vibration(key(), id(), SourceType.BLOCK, sourceBlockPosition, sourceEntityId, sourceEntityEyeHeight, travelTicks);
         }
 
         @Contract(pure = true)
-        public @NotNull Vibration withSourceEntity(int sourceEntityId, float sourceEntityEyeHeight, int travelTicks) {
+        public Vibration withSourceEntity(int sourceEntityId, float sourceEntityEyeHeight, int travelTicks) {
             return new Vibration(key(), id(), SourceType.ENTITY, sourceBlockPosition, sourceEntityId, sourceEntityEyeHeight, travelTicks);
         }
 
         @Override
-        public @NotNull Vibration readData(@NotNull NetworkBuffer reader) {
+        public Vibration readData(NetworkBuffer reader) {
             SourceType type = reader.read(NetworkBuffer.Enum(SourceType.class));
             if (type == SourceType.BLOCK) {
                 return this.withSourceBlockPosition(reader.read(NetworkBuffer.BLOCK_POSITION), reader.read(NetworkBuffer.VAR_INT));
@@ -462,7 +476,7 @@ public sealed interface Particle extends StaticProtocolObject<Particle>, Particl
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(NetworkBuffer.Enum(SourceType.class), sourceType);
             if (sourceType == SourceType.BLOCK) {
                 Objects.requireNonNull(sourceBlockPosition);
@@ -476,8 +490,8 @@ public sealed interface Particle extends StaticProtocolObject<Particle>, Particl
         }
 
         @Override
-        public @NotNull <D> Result<D> encode(@NotNull Transcoder<D> coder) {
-            return new Result.Error<>("Vibration particle cannot be serialized to NBT");
+        public StructCodec<? extends Particle> codec() {
+            throw new UnsupportedOperationException("Vibration particle cannot be serialized to NBT");
         }
 
         public enum SourceType {
@@ -485,63 +499,67 @@ public sealed interface Particle extends StaticProtocolObject<Particle>, Particl
         }
     }
 
-    record Trail(@NotNull Key key, int id, @NotNull Point target, @NotNull RGBLike color,
-                 int duration) implements Particle {
+    record Trail(
+            Key key, int id,
+            Point target,
+            RGBLike color,
+            int duration
+    ) implements Particle {
+        public static final StructCodec<Trail> CODEC = StructCodec.struct(
+                "type", Codec.KEY, Trail::key,
+                "target", Codec.VECTOR3D, Trail::target,
+                "color", Color.CODEC, Trail::color,
+                "duration", Codec.INT, Trail::duration,
+                (type, target, color, duration) ->
+                        ParticleImpl.<Trail>get(type).withProperties(target, color, duration));
 
-        public @NotNull Trail withProperties(@NotNull Point target, @NotNull RGBLike color, int duration) {
+        public Trail withProperties(Point target, RGBLike color, int duration) {
             return new Trail(key(), id(), target, color, duration);
         }
 
-        public @NotNull Trail withTarget(@NotNull Point target) {
+        public Trail withTarget(Point target) {
             return new Trail(key(), id(), target, color, duration);
         }
 
-        public @NotNull Trail withColor(@NotNull RGBLike color) {
+        public Trail withColor(RGBLike color) {
             return new Trail(key(), id(), target, color, duration);
         }
 
-        public @NotNull Trail withDuration(int duration) {
+        public Trail withDuration(int duration) {
             return new Trail(key(), id(), target, color, duration);
         }
 
         @Override
-        public @NotNull Trail readData(@NotNull NetworkBuffer reader) {
+        public Trail readData(NetworkBuffer reader) {
             return this.withProperties(reader.read(VECTOR3D), reader.read(Color.NETWORK_TYPE), reader.read(VAR_INT));
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(VECTOR3D, target);
             writer.write(Color.NETWORK_TYPE, color);
             writer.write(VAR_INT, duration);
         }
 
         @Override
-        public <D> @NotNull Result<D> encode(@NotNull Transcoder<D> coder) {
-            final Result<D> colorResult = Color.CODEC.encode(coder, color);
-            if (!(colorResult instanceof Result.Ok(D colorData)))
-                return colorResult.cast();
-            final Result<D> targetResult = Codec.VECTOR3D.encode(coder, target);
-            if (!(targetResult instanceof Result.Ok(D targetData)))
-                return targetResult.cast();
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("target", targetData)
-                    .put("color", colorData)
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record BlockCrumble(@NotNull Key key, int id,
-                        @NotNull net.minestom.server.instance.block.Block block) implements Particle {
+    record BlockCrumble(Key key, int id, net.minestom.server.instance.block.Block block) implements Particle {
+        public static final StructCodec<BlockCrumble> CODEC = StructCodec.struct(
+                "type", Codec.KEY, BlockCrumble::key,
+                "block_state", STATE_STRUCT_CODEC, BlockCrumble::block,
+                (key, block) -> ParticleImpl.<BlockCrumble>get(key).withBlock(block));
 
         @Contract(pure = true)
-        public @NotNull Block withBlock(@NotNull net.minestom.server.instance.block.Block block) {
-            return new Block(key(), id(), block);
+        public BlockCrumble withBlock(net.minestom.server.instance.block.Block block) {
+            return new BlockCrumble(key(), id(), block);
         }
 
         @Override
-        public @NotNull Block readData(@NotNull NetworkBuffer reader) {
+        public BlockCrumble readData(NetworkBuffer reader) {
             short blockState = reader.read(NetworkBuffer.VAR_INT).shortValue();
             var block = net.minestom.server.instance.block.Block.fromStateId(blockState);
             Check.stateCondition(block == null, "Block state " + blockState + " is invalid");
@@ -549,55 +567,330 @@ public sealed interface Particle extends StaticProtocolObject<Particle>, Particl
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(NetworkBuffer.VAR_INT, block.stateId());
         }
 
         @Override
-        public <D> @NotNull Result<D> encode(@NotNull Transcoder<D> coder) {
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("block_state", coder.createString(block.state()))
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
-    record TintedLeaves(@NotNull Key key, int id, @NotNull AlphaColor color) implements Particle {
+    record TintedLeaves(Key key, int id, AlphaColor color) implements Particle {
+        public static final StructCodec<TintedLeaves> CODEC = StructCodec.struct(
+                "type", Codec.KEY, TintedLeaves::key,
+                "color", AlphaColor.CODEC, TintedLeaves::color,
+                (type, color) -> ParticleImpl.<TintedLeaves>get(type).withColor(color));
+
         @Contract(pure = true)
-        public @NotNull TintedLeaves withColor(@NotNull AlphaColor color) {
+        public TintedLeaves withColor(AlphaColor color) {
             return new TintedLeaves(key(), id(), color);
         }
 
         @Contract(pure = true)
-        public @NotNull TintedLeaves withColor(@NotNull RGBLike color) {
+        public TintedLeaves withColor(RGBLike color) {
             return new TintedLeaves(key(), id(), new AlphaColor(1, color));
         }
 
         @Contract(pure = true)
-        public @NotNull TintedLeaves withColor(int alpha, @NotNull RGBLike color) {
+        public TintedLeaves withColor(int alpha, RGBLike color) {
             return new TintedLeaves(key(), id(), new AlphaColor(alpha, color));
         }
 
         @Override
-        public @NotNull TintedLeaves readData(@NotNull NetworkBuffer reader) {
+        public TintedLeaves readData(NetworkBuffer reader) {
             return withColor(reader.read(AlphaColor.NETWORK_TYPE));
         }
 
         @Override
-        public void writeData(@NotNull NetworkBuffer writer) {
+        public void writeData(NetworkBuffer writer) {
             writer.write(AlphaColor.NETWORK_TYPE, color);
         }
 
         @Override
-        public @NotNull <D> Result<D> encode(@NotNull Transcoder<D> coder) {
-            final Result<D> colorResult = AlphaColor.CODEC.encode(coder, color);
-            if (!(colorResult instanceof Result.Ok(D colorData)))
-                return colorResult.cast();
-            return new Result.Ok<>(coder.createMap()
-                    .put("type", coder.createString(key.asString()))
-                    .put("color", colorData)
-                    .build());
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
         }
     }
 
+    record DragonBreath(Key key, int id, float power) implements Particle {
+        public static final StructCodec<DragonBreath> CODEC = StructCodec.struct(
+                "type", Codec.KEY, DragonBreath::key,
+                "power", Codec.FLOAT, DragonBreath::power,
+                (type, power) -> ParticleImpl.<DragonBreath>get(type).withPower(power));
+
+        @Contract(pure = true)
+        public DragonBreath withPower(float power) {
+            return new DragonBreath(key(), id(), power);
+        }
+
+        @Override
+        public DragonBreath readData(NetworkBuffer reader) {
+            return withPower(reader.read(NetworkBuffer.FLOAT));
+        }
+
+        @Override
+        public void writeData(NetworkBuffer writer) {
+            writer.write(NetworkBuffer.FLOAT, power);
+        }
+
+        @Override
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
+        }
+    }
+
+    record Effect(Key key, int id, RGBLike color, float power) implements Particle {
+        public static final StructCodec<Effect> CODEC = StructCodec.struct(
+                "type", Codec.KEY, Effect::key,
+                "color", Color.CODEC, Effect::color,
+                "power", Codec.FLOAT, Effect::power,
+                (type, color, power) -> ParticleImpl.<Effect>get(type).withProperties(color, power));
+
+        @Contract(pure = true)
+        public Effect withColor(RGBLike color) {
+            return new Effect(key(), id(), color, power);
+        }
+
+        @Contract(pure = true)
+        public Effect withPower(float power) {
+            return new Effect(key(), id(), color, power);
+        }
+
+        @Contract(pure = true)
+        public Effect withProperties(RGBLike color, float power) {
+            return new Effect(key(), id(), color, power);
+        }
+
+        @Override
+        public Effect readData(NetworkBuffer reader) {
+            return withProperties(reader.read(Color.NETWORK_TYPE), reader.read(NetworkBuffer.FLOAT));
+        }
+
+        @Override
+        public void writeData(NetworkBuffer writer) {
+            writer.write(Color.NETWORK_TYPE, color);
+            writer.write(NetworkBuffer.FLOAT, power);
+        }
+
+        @Override
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
+        }
+    }
+
+    record Flash(Key key, int id, AlphaColor color) implements Particle {
+        public static final StructCodec<Flash> CODEC = StructCodec.struct(
+                "type", Codec.KEY, Flash::key,
+                "color", Color.CODEC, Flash::color,
+                (type, color) -> ParticleImpl.<Flash>get(type).withColor(color));
+
+        @Contract(pure = true)
+        public Flash withColor(AlphaColor color) {
+            return new Flash(key(), id(), color);
+        }
+
+        @Contract(pure = true)
+        public Flash withColor(RGBLike color) {
+            return new Flash(key(), id(), new AlphaColor(1, color));
+        }
+
+        @Contract(pure = true)
+        public Flash withColor(int alpha, RGBLike color) {
+            return new Flash(key(), id(), new AlphaColor(alpha, color));
+        }
+
+        @Override
+        public Flash readData(NetworkBuffer reader) {
+            return withColor(reader.read(AlphaColor.NETWORK_TYPE));
+        }
+
+        @Override
+        public void writeData(NetworkBuffer writer) {
+            writer.write(AlphaColor.NETWORK_TYPE, color);
+        }
+
+        @Override
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
+        }
+    }
+
+    record InstantEffect(Key key, int id, RGBLike color, float power) implements Particle {
+        public static final StructCodec<InstantEffect> CODEC = StructCodec.struct(
+                "type", Codec.KEY, InstantEffect::key,
+                "color", Color.CODEC, InstantEffect::color,
+                "power", Codec.FLOAT, InstantEffect::power,
+                (key, color, power) -> ParticleImpl.<InstantEffect>get(key).withProperties(color, power));
+
+        @Contract(pure = true)
+        public InstantEffect withColor(RGBLike color) {
+            return new InstantEffect(key(), id(), color, power);
+        }
+
+        @Contract(pure = true)
+        public InstantEffect withPower(float power) {
+            return new InstantEffect(key(), id(), color, power);
+        }
+
+        @Contract(pure = true)
+        public InstantEffect withProperties(RGBLike color, float power) {
+            return new InstantEffect(key(), id(), color, power);
+        }
+
+        @Override
+        public InstantEffect readData(NetworkBuffer reader) {
+            return withProperties(reader.read(Color.NETWORK_TYPE), reader.read(NetworkBuffer.FLOAT));
+        }
+
+        @Override
+        public void writeData(NetworkBuffer writer) {
+            writer.write(Color.NETWORK_TYPE, color);
+            writer.write(NetworkBuffer.FLOAT, power);
+        }
+
+        @Override
+        public StructCodec<? extends Particle> codec() {
+            return CODEC;
+        }
+    }
+
+    record Geyser(Key key, int id, int waterBlocks) implements Particle {
+        public static final StructCodec<Geyser> CODEC = StructCodec.struct(
+                "type", Codec.KEY, Geyser::key,
+                "water_blocks", Codec.INT, Geyser::waterBlocks,
+                (key, waterBlocks) -> ParticleImpl.<Geyser>get(key).withWaterBlocks(waterBlocks));
+
+        @Contract(pure = true)
+        public Geyser withWaterBlocks(int waterBlocks) {
+            return new Geyser(key(), id(), waterBlocks);
+        }
+
+        @Override
+        public Geyser readData(NetworkBuffer reader) {
+            int waterBlocks = reader.read(NetworkBuffer.INT);
+            return withWaterBlocks(waterBlocks);
+        }
+
+        @Override
+        public void writeData(NetworkBuffer writer) {
+            writer.write(NetworkBuffer.INT, waterBlocks);
+        }
+
+        @Override
+        public StructCodec<Geyser> codec() {
+            return CODEC;
+        }
+    }
+
+    record GeyserBase(Key key, int id, int waterBlocks, float burstImpulseBase) implements Particle {
+        public static final StructCodec<GeyserBase> CODEC = StructCodec.struct(
+                "type", Codec.KEY, GeyserBase::key,
+                "water_blocks", Codec.INT, GeyserBase::waterBlocks,
+                "burst_impulse_base", Codec.FLOAT, GeyserBase::burstImpulseBase,
+                (key, waterBlocks, burstImpulseBase) -> ParticleImpl.<GeyserBase>get(key).withProperties(waterBlocks, burstImpulseBase));
+
+        @Contract(pure = true)
+        public GeyserBase withWaterBlocks(int waterBlocks) {
+            return new GeyserBase(key(), id(), waterBlocks, burstImpulseBase());
+        }
+
+        @Contract(pure = true)
+        public GeyserBase withBurstImpulseBase(float burstImpulseBase) {
+            return new GeyserBase(key(), id(), waterBlocks(), burstImpulseBase);
+        }
+
+        @Contract(pure = true)
+        public GeyserBase withProperties(int waterBlocks, float burstImpulseBase) {
+            return new GeyserBase(key(), id(), waterBlocks, burstImpulseBase);
+        }
+
+        @Override
+        public GeyserBase readData(NetworkBuffer reader) {
+            int waterBlocks = reader.read(NetworkBuffer.INT);
+            float burstImpulseBase = reader.read(NetworkBuffer.FLOAT);
+            return withProperties(waterBlocks, burstImpulseBase);
+        }
+
+        @Override
+        public void writeData(NetworkBuffer writer) {
+            writer.write(NetworkBuffer.INT, waterBlocks);
+            writer.write(NetworkBuffer.FLOAT, burstImpulseBase);
+        }
+
+        @Override
+        public StructCodec<GeyserBase> codec() {
+            return CODEC;
+        }
+    }
+
+    record GeyserPlume(Key key, int id, int waterBlocks) implements Particle {
+        public static final StructCodec<GeyserPlume> CODEC = StructCodec.struct(
+                "type", Codec.KEY, GeyserPlume::key,
+                "water_blocks", Codec.INT, GeyserPlume::waterBlocks,
+                (key, waterBlocks) -> ParticleImpl.<GeyserPlume>get(key).withWaterBlocks(waterBlocks));
+
+        @Contract(pure = true)
+        public GeyserPlume withWaterBlocks(int waterBlocks) {
+            return new GeyserPlume(key(), id(), waterBlocks);
+        }
+
+        @Override
+        public GeyserPlume readData(NetworkBuffer reader) {
+            int waterBlocks = reader.read(NetworkBuffer.INT);
+            return withWaterBlocks(waterBlocks);
+        }
+
+        @Override
+        public void writeData(NetworkBuffer writer) {
+            writer.write(NetworkBuffer.INT, waterBlocks);
+        }
+
+        @Override
+        public StructCodec<GeyserPlume> codec() {
+            return CODEC;
+        }
+    }
+
+    record GeyserPoof(Key key, int id, int waterBlocks, float burstImpulseBase) implements Particle {
+        public static final StructCodec<GeyserPoof> CODEC = StructCodec.struct(
+                "type", Codec.KEY, GeyserPoof::key,
+                "water_blocks", Codec.INT, GeyserPoof::waterBlocks,
+                "burst_impulse_base", Codec.FLOAT, GeyserPoof::burstImpulseBase,
+                (key, waterBlocks, burstImpulseBase) -> ParticleImpl.<GeyserPoof>get(key).withProperties(waterBlocks, burstImpulseBase));
+
+        @Contract(pure = true)
+        public GeyserPoof withWaterBlocks(int waterBlocks) {
+            return new GeyserPoof(key(), id(), waterBlocks, burstImpulseBase());
+        }
+
+        @Contract(pure = true)
+        public GeyserPoof withBurstImpulseBase(float burstImpulseBase) {
+            return new GeyserPoof(key(), id(), waterBlocks(), burstImpulseBase);
+        }
+
+        @Contract(pure = true)
+        public GeyserPoof withProperties(int waterBlocks, float burstImpulseBase) {
+            return new GeyserPoof(key(), id(), waterBlocks, burstImpulseBase);
+        }
+
+        @Override
+        public GeyserPoof readData(NetworkBuffer reader) {
+            int waterBlocks = reader.read(NetworkBuffer.INT);
+            float burstImpulseBase = reader.read(NetworkBuffer.FLOAT);
+            return withProperties(waterBlocks, burstImpulseBase);
+        }
+
+        @Override
+        public void writeData(NetworkBuffer writer) {
+            writer.write(NetworkBuffer.INT, waterBlocks);
+            writer.write(NetworkBuffer.FLOAT, burstImpulseBase);
+        }
+
+        @Override
+        public StructCodec<GeyserPoof> codec() {
+            return CODEC;
+        }
+    }
 }

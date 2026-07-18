@@ -10,8 +10,9 @@ import net.minestom.server.network.packet.server.SendablePacket;
 import net.minestom.server.network.packet.server.play.DeclareRecipesPacket;
 import net.minestom.server.network.packet.server.play.RecipeBookAddPacket;
 import net.minestom.server.recipe.display.RecipeDisplay;
+import net.minestom.server.recipe.display.SlotDisplay;
+import net.minestom.server.registry.RegistryTag;
 import net.minestom.server.utils.validate.Check;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -23,9 +24,9 @@ public final class RecipeManager {
     private static final AtomicInteger NEXT_DISPLAY_ID = new AtomicInteger();
 
     private record RecipeData(
-            @NotNull Recipe recipe,
-            @NotNull List<RecipeBookAddPacket.Entry> displays,
-            @NotNull Predicate<Player> predicate
+            Recipe recipe,
+            List<RecipeBookAddPacket.Entry> displays,
+            Predicate<Player> predicate
     ) {
     }
 
@@ -35,11 +36,11 @@ public final class RecipeManager {
     private final Int2ObjectMap<Map.Entry<RecipeBookAddPacket.Entry, Predicate<Player>>> recipeBookEntryIdMap =
             Int2ObjectMaps.synchronize(new Int2ObjectArrayMap<>());
 
-    public void addRecipe(@NotNull Recipe recipe) {
+    public void addRecipe(Recipe recipe) {
         addRecipe(recipe, player -> true);
     }
 
-    public void addRecipe(@NotNull Recipe recipe, @NotNull Predicate<Player> predicate) {
+    public void addRecipe(Recipe recipe, Predicate<Player> predicate) {
         List<RecipeBookAddPacket.Entry> recipeBookEntries = new ArrayList<>();
         final RecipeBookCategory recipeBookCategory = recipe.recipeBookCategory();
         if (recipeBookCategory != null) {
@@ -59,7 +60,7 @@ public final class RecipeManager {
         }
     }
 
-    public void removeRecipe(@NotNull Recipe recipe) {
+    public void removeRecipe(Recipe recipe) {
         final RecipeData removed = recipes.remove(recipe);
         if (removed != null) {
             for (var entry : removed.displays) {
@@ -68,7 +69,7 @@ public final class RecipeManager {
         }
     }
 
-    public @NotNull Set<Recipe> getRecipes() {
+    public Set<Recipe> getRecipes() {
         return recipes.keySet();
     }
 
@@ -86,7 +87,7 @@ public final class RecipeManager {
         return recipeBookEntry.getKey().display();
     }
 
-    public @NotNull SendablePacket getDeclareRecipesPacket() {
+    public SendablePacket getDeclareRecipesPacket() {
         return declareRecipesPacket;
     }
 
@@ -97,7 +98,7 @@ public final class RecipeManager {
      * @param player the player to create the packet for
      * @return the recipe book add packet with replace set to true
      */
-    public @NotNull RecipeBookAddPacket createRecipeBookResetPacket(@NotNull Player player) {
+    public RecipeBookAddPacket createRecipeBookResetPacket(Player player) {
         final List<RecipeBookAddPacket.Entry> entries = new ArrayList<>();
         for (final Map.Entry<Recipe, RecipeData> recipeEntry : recipes.entrySet()) {
             if (!recipeEntry.getValue().predicate.test(player)) continue;
@@ -107,7 +108,7 @@ public final class RecipeManager {
         return new RecipeBookAddPacket(entries, true);
     }
 
-    private @NotNull DeclareRecipesPacket createDeclareRecipesPacket() {
+    private DeclareRecipesPacket createDeclareRecipesPacket() {
         // Collect the item properties for the client
         final Map<RecipeProperty, Set<Material>> itemProperties = new HashMap<>();
         for (var recipe : recipes.keySet()) {
@@ -126,13 +127,24 @@ public final class RecipeManager {
             if (!(recipeBookEntry.getKey().display() instanceof RecipeDisplay.Stonecutter stonecutterDisplay))
                 continue;
 
-            final Ingredient input = Ingredient.fromSlotDisplay(stonecutterDisplay.ingredient());
+            final Ingredient input = ingredientFromSlotDisplay(stonecutterDisplay.ingredient());
             if (input == null) continue;
 
             stonecutterRecipes.add(new DeclareRecipesPacket.StonecutterRecipe(input, stonecutterDisplay.result()));
         }
 
         return new DeclareRecipesPacket(itemPropertiesLists, stonecutterRecipes);
+    }
+
+    private static @Nullable Ingredient ingredientFromSlotDisplay(SlotDisplay slotDisplay) {
+        return switch (slotDisplay) {
+            case SlotDisplay.Item item -> new Ingredient(item.material());
+            case SlotDisplay.Tag tag -> {
+                final RegistryTag<Material> tagValue = Material.staticRegistry().getTag(tag.tag());
+                yield tagValue != null ? new Ingredient(tagValue) : null;
+            }
+            default -> null;
+        };
     }
 
 }

@@ -6,11 +6,10 @@ import net.minestom.server.entity.Entity;
 import net.minestom.server.entity.MetadataDef;
 import net.minestom.server.entity.MetadataHolder;
 import net.minestom.server.registry.RegistryKey;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class PigMeta extends AnimalMeta {
-    public PigMeta(@NotNull Entity entity, @NotNull MetadataHolder metadata) {
+    public PigMeta(@Nullable Entity entity, MetadataHolder metadata) {
         super(entity, metadata);
     }
 
@@ -26,7 +25,7 @@ public class PigMeta extends AnimalMeta {
      * @deprecated use {@link net.minestom.server.component.DataComponents#PIG_VARIANT} instead.
      */
     @Deprecated
-    public @NotNull RegistryKey<PigVariant> getVariant() {
+    public RegistryKey<PigVariant> getVariant() {
         return metadata.get(MetadataDef.Pig.VARIANT);
     }
 
@@ -34,23 +33,27 @@ public class PigMeta extends AnimalMeta {
      * @deprecated use {@link net.minestom.server.component.DataComponents#PIG_VARIANT} instead.
      */
     @Deprecated
-    public void setVariant(@NotNull RegistryKey<PigVariant> value) {
+    public void setVariant(RegistryKey<PigVariant> value) {
         metadata.set(MetadataDef.Pig.VARIANT, value);
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> @Nullable T get(@NotNull DataComponent<T> component) {
+    protected <T> @Nullable T get(DataComponent<T> component) {
         if (component == DataComponents.PIG_VARIANT)
             return (T) getVariant();
+        if (component == DataComponents.PIG_SOUND_VARIANT)
+            return (T) metadata.get(MetadataDef.Pig.SOUND_VARIANT);
         return super.get(component);
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> void set(@NotNull DataComponent<T> component, @NotNull T value) {
+    protected <T> void set(DataComponent<T> component, T value) {
         if (component == DataComponents.PIG_VARIANT)
             setVariant((RegistryKey<PigVariant>) value);
+        else if (component == DataComponents.PIG_SOUND_VARIANT)
+            metadata.set(MetadataDef.Pig.SOUND_VARIANT, (RegistryKey<PigSoundVariant>) value);
         else super.set(component, value);
     }
 

@@ -1,17 +1,15 @@
 package net.minestom.server.timer;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 final class TaskScheduleImpl {
-    static TaskSchedule NEXT_TICK = new TickSchedule(1);
-    static TaskSchedule PARK = new Park();
-    static TaskSchedule STOP = new Stop();
-    static TaskSchedule IMMEDIATE = new Immediate();
+    static final TaskSchedule NEXT_TICK = new TickSchedule(1);
+    static final TaskSchedule PARK = new Park();
+    static final TaskSchedule STOP = new Stop();
+    static final TaskSchedule IMMEDIATE = new Immediate();
 
-    record DurationSchedule(@NotNull Duration duration) implements TaskSchedule {
+    record DurationSchedule(Duration duration) implements TaskSchedule {
     }
 
     record TickSchedule(int tick) implements TaskSchedule {

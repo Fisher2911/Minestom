@@ -1,14 +1,11 @@
 package net.minestom.server.event.player;
 
 import net.minestom.server.coordinate.BlockVec;
-import net.minestom.server.coordinate.Point;
 import net.minestom.server.entity.Player;
-import net.minestom.server.event.trait.BlockEvent;
-import net.minestom.server.event.trait.CancellableEvent;
-import net.minestom.server.event.trait.PlayerInstanceEvent;
+import net.minestom.server.event.trait.*;
+import net.minestom.server.instance.Instance;
 import net.minestom.server.instance.block.Block;
 import net.minestom.server.instance.block.BlockFace;
-import org.jetbrains.annotations.NotNull;
 
 /**
  * Called when a {@link Player} start digging a block,
@@ -21,18 +18,26 @@ import org.jetbrains.annotations.NotNull;
 public class PlayerStartDiggingEvent implements PlayerInstanceEvent, BlockEvent, CancellableEvent {
 
     private final Player player;
+    private final Instance instance;
     private final Block block;
     private final BlockVec blockPosition;
     private final BlockFace blockFace;
 
     private boolean cancelled;
 
-    public PlayerStartDiggingEvent(@NotNull Player player, @NotNull Block block, @NotNull BlockVec blockPosition,
-                                   @NotNull BlockFace blockFace) {
+    public PlayerStartDiggingEvent(Player player, Instance instance, Block block,
+                                   BlockVec blockPosition,
+                                   BlockFace blockFace) {
         this.player = player;
+        this.instance = instance;
         this.block = block;
         this.blockPosition = blockPosition;
         this.blockFace = blockFace;
+    }
+
+    @Override
+    public Instance getInstance() {
+        return instance;
     }
 
     /**
@@ -41,7 +46,7 @@ public class PlayerStartDiggingEvent implements PlayerInstanceEvent, BlockEvent,
      * @return the block
      */
     @Override
-    public @NotNull Block getBlock() {
+    public Block getBlock() {
         return block;
     }
 
@@ -51,7 +56,7 @@ public class PlayerStartDiggingEvent implements PlayerInstanceEvent, BlockEvent,
      * @return the block position
      */
     @Override
-    public @NotNull BlockVec getBlockPosition() {
+    public BlockVec getBlockPosition() {
         return blockPosition;
     }
 
@@ -60,7 +65,7 @@ public class PlayerStartDiggingEvent implements PlayerInstanceEvent, BlockEvent,
      *
      * @return the block face
      */
-    public @NotNull BlockFace getBlockFace() {
+    public BlockFace getBlockFace() {
         return blockFace;
     }
 
@@ -75,7 +80,7 @@ public class PlayerStartDiggingEvent implements PlayerInstanceEvent, BlockEvent,
     }
 
     @Override
-    public @NotNull Player getPlayer() {
+    public Player getPlayer() {
         return player;
     }
 }

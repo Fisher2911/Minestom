@@ -7,24 +7,31 @@ import net.kyori.adventure.text.*;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.*;
+import net.kyori.adventure.text.object.ObjectContents;
+import net.kyori.adventure.text.object.PlayerHeadObjectContents;
+import net.kyori.adventure.text.object.SpriteObjectContents;
 import net.minestom.server.adventure.MinestomAdventure;
 import net.minestom.server.codec.Transcoder.MapBuilder;
 import net.minestom.server.codec.Transcoder.MapLike;
 import net.minestom.server.dialog.Dialog;
+import net.minestom.server.network.player.ResolvableProfile;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
+/**
+ * Used internally to hold component codecs
+ */
 @ApiStatus.Internal
 public final class ComponentCodecs {
+    private ComponentCodecs() {}
     // Very gross :|
     private static final Codec<Component> COMPONENT_FORWARD = Codec.ForwardRef(() -> Codec.COMPONENT);
 
     public static final Codec<TextColor> TEXT_COLOR = new Codec<>() {
         @Override
-        public @NotNull <D> Result<TextColor> decode(@NotNull Transcoder<D> coder, @NotNull D value) {
+        public <D> Result<TextColor> decode(Transcoder<D> coder, D value) {
             final Result<String> colorResult = coder.getString(value);
             if (!(colorResult instanceof Result.Ok(String colorString)))
                 return colorResult.cast();
@@ -39,17 +46,17 @@ public final class ComponentCodecs {
         }
 
         @Override
-        public @NotNull <D> Result<D> encode(@NotNull Transcoder<D> coder, @Nullable TextColor value) {
+        public <D> Result<D> encode(Transcoder<D> coder, @Nullable TextColor value) {
             if (value == null) return new Result.Error<>("null");
             if (value instanceof NamedTextColor namedColor)
-                return new Result.Ok<>(coder.createString(namedColor.toString()));
+                return new Result.Ok<>(coder.createString(namedColor.name()));
             return new Result.Ok<>(coder.createString(value.asHexString()));
         }
     };
 
     public static final Codec<ShadowColor> SHADOW_COLOR = Codec.INT.transform(ShadowColor::shadowColor, ShadowColor::value);
 
-    private static @Nullable Boolean stateToBool(@NotNull TextDecoration.State state) {
+    private static @Nullable Boolean stateToBool(TextDecoration.State state) {
         return switch (state) {
             case NOT_SET -> null;
             case FALSE -> false;
@@ -57,31 +64,41 @@ public final class ComponentCodecs {
         };
     }
 
-    public static final StructCodec<ClickEvent> CLICK_EVENT = new StructCodec<>() {
-        private static final Codec<ClickEvent.Action> ACTION_CODEC = Codec.Enum(ClickEvent.Action.class);
+    private static List<Component> extractTranslatableComponents(final TranslatableComponent component) {
+        final List<TranslationArgument> arguments = component.arguments();
+        if (arguments.isEmpty()) return List.of();
+        Component[] components = new Component[arguments.size()];
+        for (int i = 0; i < components.length; i++) {
+            components[i] = arguments.get(i).asComponent();
+        }
+        return List.of(components);
+    }
+
+    public static final StructCodec<ClickEvent<?>> CLICK_EVENT = new StructCodec<>() {
+        private static final Codec<ClickEvent.Action<?>> ACTION_CODEC = Codec.STRING.transform(ClickEvent.Action.NAMES::value, ClickEvent.Action::name);
 
         @Override
-        public @NotNull <D> Result<ClickEvent> decodeFromMap(@NotNull Transcoder<D> coder, @NotNull MapLike<D> map) {
-            final Result<ClickEvent.Action> actionResult = map.getValue("action").map(value -> ACTION_CODEC.decode(coder, value));
+        public <D> Result<ClickEvent<?>> decodeFromMap(Transcoder<D> coder, MapLike<D> map) {
+            final Result<ClickEvent.Action<?>> actionResult = map.getValue("action").map(value -> ACTION_CODEC.decode(coder, value));
             if (!(actionResult instanceof Result.Ok(var action)))
                 return actionResult.cast();
 
             return switch (action) {
-                case OPEN_URL -> map.getValue("url").map(value -> Codec.STRING.decode(coder, value))
+                case ClickEvent.Action.OpenUrl _ -> map.getValue("url").map(value -> Codec.STRING.decode(coder, value))
                         .mapResult(ClickEvent::openUrl);
-                case OPEN_FILE -> map.getValue("path").map(value -> Codec.STRING.decode(coder, value))
+                case ClickEvent.Action.OpenFile _ -> map.getValue("path").map(value -> Codec.STRING.decode(coder, value))
                         .mapResult(ClickEvent::openFile);
-                case RUN_COMMAND -> map.getValue("command").map(value -> Codec.STRING.decode(coder, value))
+                case ClickEvent.Action.RunCommand _ -> map.getValue("command").map(value -> Codec.STRING.decode(coder, value))
                         .mapResult(ClickEvent::runCommand);
-                case SUGGEST_COMMAND -> map.getValue("command").map(value -> Codec.STRING.decode(coder, value))
+                case ClickEvent.Action.SuggestCommand _ -> map.getValue("command").map(value -> Codec.STRING.decode(coder, value))
                         .mapResult(ClickEvent::suggestCommand);
-                case CHANGE_PAGE -> map.getValue("page").map(value -> Codec.INT.decode(coder, value))
+                case ClickEvent.Action.ChangePage _ -> map.getValue("page").map(value -> Codec.INT.decode(coder, value))
                         .mapResult(ClickEvent::changePage);
-                case COPY_TO_CLIPBOARD -> map.getValue("value").map(value -> Codec.STRING.decode(coder, value))
+                case ClickEvent.Action.CopyToClipboard _ -> map.getValue("value").map(value -> Codec.STRING.decode(coder, value))
                         .mapResult(ClickEvent::copyToClipboard);
-                case SHOW_DIALOG -> map.getValue("dialog").map(value -> Dialog.CODEC.decode(coder, value))
+                case ClickEvent.Action.ShowDialog _ -> map.getValue("dialog").map(value -> Dialog.CODEC.decode(coder, value))
                         .mapResult(dialog -> ClickEvent.showDialog(Dialog.wrap(dialog)));
-                case CUSTOM -> {
+                case ClickEvent.Action.Custom _ -> {
                     final Result<Key> idResult = map.getValue("id").map(value -> Codec.KEY.decode(coder, value));
                     if (!(idResult instanceof Result.Ok(Key id)))
                         yield idResult.cast();
@@ -102,24 +119,24 @@ public final class ComponentCodecs {
         }
 
         @Override
-        public @NotNull <D> Result<D> encodeToMap(@NotNull Transcoder<D> coder, @NotNull ClickEvent value, @NotNull MapBuilder<D> map) {
+        public <D> Result<D> encodeToMap(Transcoder<D> coder, ClickEvent<?> value, MapBuilder<D> map) {
             final Result<D> actionResult = ACTION_CODEC.encode(coder, value.action());
             if (!(actionResult instanceof Result.Ok(D actionValue)))
                 return actionResult.cast();
             map.put("action", actionValue);
 
             return encodePayload(coder, switch (value.action()) {
-                case OPEN_URL -> "url";
-                case OPEN_FILE -> "path";
-                case RUN_COMMAND, SUGGEST_COMMAND -> "command";
-                case CHANGE_PAGE -> "page";
-                case COPY_TO_CLIPBOARD -> "value";
-                case SHOW_DIALOG -> "dialog";
-                case CUSTOM -> "__IGNORED__"; // Custom payload keys are written inside its writer
+                case ClickEvent.Action.OpenUrl _ -> "url";
+                case ClickEvent.Action.OpenFile _ -> "path";
+                case ClickEvent.Action.RunCommand _, ClickEvent.Action.SuggestCommand _ -> "command";
+                case ClickEvent.Action.ChangePage _  -> "page";
+                case ClickEvent.Action.CopyToClipboard _ -> "value";
+                case ClickEvent.Action.ShowDialog _ -> "dialog";
+                case ClickEvent.Action.Custom _ -> "__IGNORED__"; // Custom payload keys are written inside its writer
             }, value.payload(), map);
         }
 
-        private static <D> @NotNull Result<D> encodePayload(@NotNull Transcoder<D> coder, @NotNull String name, @NotNull ClickEvent.Payload payload, @NotNull MapBuilder<D> map) {
+        private static <D> Result<D> encodePayload(Transcoder<D> coder, String name, ClickEvent.Payload payload, MapBuilder<D> map) {
             return switch (payload) {
                 case ClickEvent.Payload.Text string -> {
                     map.put(name, coder.createString(string.value()));
@@ -145,8 +162,6 @@ public final class ComponentCodecs {
                     map.put("payload", customPayload);
                     yield new Result.Ok<>(map.build());
                 }
-                default ->
-                        throw new UnsupportedOperationException("Unknown click event payload type: " + payload.getClass());
             };
         }
     };
@@ -164,10 +179,10 @@ public final class ComponentCodecs {
     private static final StructCodec<HoverEvent<HoverEvent.ShowEntity>> SHOW_ENTITY = StructCodec.struct(
             "id", Codec.KEY, hoverEvent -> hoverEvent.value().type(),
             "uuid", Codec.UUID_COERCED, hoverEvent -> hoverEvent.value().id(),
-            "name", COMPONENT_FORWARD, hoverEvent -> hoverEvent.value().name(),
+            "name", COMPONENT_FORWARD.optional(), hoverEvent -> hoverEvent.value().name(),
             HoverEvent::showEntity);
 
-    private static StructCodec<? extends HoverEvent<?>> hoverEventCodec(@NotNull HoverEvent.Action<?> action) {
+    private static StructCodec<? extends HoverEvent<?>> hoverEventCodec(HoverEvent.Action<?> action) {
         if (action == HoverEvent.Action.SHOW_TEXT) return SHOW_TEXT;
         if (action == HoverEvent.Action.SHOW_ITEM) return SHOW_ITEM;
         if (action == HoverEvent.Action.SHOW_ENTITY) return SHOW_ENTITY;
@@ -207,7 +222,7 @@ public final class ComponentCodecs {
     private static final StructCodec<TranslatableComponent> TRANSLATABLE_CONTENT = StructCodec.struct(
             "translate", Codec.STRING, TranslatableComponent::key,
             "fallback", Codec.STRING.optional(), TranslatableComponent::fallback,
-            "with", COMPONENT_FORWARD.list().optional(List.of()), TranslatableComponent::args,
+            "with", COMPONENT_FORWARD.list().optional(List.of()), ComponentCodecs::extractTranslatableComponents,
             Component::translatable);
     private static final StructCodec<ScoreComponent> SCORE_INNER_CONTENT = StructCodec.struct(
             "name", Codec.STRING, ScoreComponent::name,
@@ -223,14 +238,62 @@ public final class ComponentCodecs {
     private static final StructCodec<KeybindComponent> KEYBIND_CONTENT = StructCodec.struct(
             "keybind", Codec.STRING, component -> component.keybind(),
             Component::keybind);
-    private static final StructCodec<NBTComponent<?, ?>> NBT_CONTENT = new StructCodec<>() {
+    private static final StructCodec<ObjectComponent> OBJECT_CONTENT = new StructCodec<>() {
+        private static final StructCodec<SpriteObjectContents> SPRITE_CONTENT = StructCodec.struct(
+                "atlas", Codec.KEY.optional(SpriteObjectContents.DEFAULT_ATLAS), SpriteObjectContents::atlas,
+                "sprite", Codec.KEY, SpriteObjectContents::sprite,
+                ObjectContents::sprite);
+        private static final StructCodec<PlayerHeadObjectContents> PLAYER_HEAD_CONTENTS = StructCodec.struct(
+                "player", ResolvableProfile.CODEC, ResolvableProfile::fromPlayerHeadContents,
+                "hat", Codec.BOOLEAN.optional(true), PlayerHeadObjectContents::hat,
+                (player, hat) -> {
+                    final PlayerHeadObjectContents.Builder builder = ObjectContents.playerHead();
+                    player.applySkinToPlayerHeadContents(builder);
+                    return builder.hat(hat).build();
+                });
+
         @Override
-        public @NotNull <D> Result<NBTComponent<?, ?>> decodeFromMap(@NotNull Transcoder<D> coder, @NotNull MapLike<D> map) {
+        public <D> Result<ObjectComponent> decodeFromMap(Transcoder<D> coder, MapLike<D> map) {
+            final Result<? extends ObjectContents> contents = map.hasValue("player")
+                    ? PLAYER_HEAD_CONTENTS.decodeFromMap(coder, map)
+                    : SPRITE_CONTENT.decodeFromMap(coder, map);
+            // fallback is inlined into the map.
+            if (!map.hasValue("fallback")) {
+                return contents.mapResult(Component::object);
+            }
+
+            final Result<Component> fallback = map.getValue("fallback")
+                    .map(value -> ComponentCodecs.COMPONENT.decode(coder, value))
+                    .mapError(error -> "fallback: " + error);
+            return contents.map(objectContents -> fallback.mapResult(fallbackComponent ->
+                    Component.object().contents(objectContents).fallback(fallbackComponent).build()));
+        }
+
+        @Override
+        public <D> Result<D> encodeToMap(Transcoder<D> coder, ObjectComponent value, MapBuilder<D> map) {
+            var fallback = value.fallback();
+            if (fallback != null) {
+                switch (ComponentCodecs.COMPONENT.encode(coder, fallback)) {
+                    case Result.Ok<D>(D component) -> map.put("fallback", component);
+                    case Result.Error<D>(String error) -> {
+                        return new Result.Error<>("fallback: " + error);
+                    }
+                }
+            }
+            return switch (value.contents()) {
+                case SpriteObjectContents sprite -> SPRITE_CONTENT.encodeToMap(coder, sprite, map);
+                case PlayerHeadObjectContents playerHead -> PLAYER_HEAD_CONTENTS.encodeToMap(coder, playerHead, map);
+            };
+        }
+    };
+    private static final StructCodec<NBTComponent<?>> NBT_CONTENT = new StructCodec<>() {
+        @Override
+        public <D> Result<NBTComponent<?>> decodeFromMap(Transcoder<D> coder, MapLike<D> map) {
             return new Result.Error<>("NBTComponent not yet supported");
         }
 
         @Override
-        public @NotNull <D> Result<D> encodeToMap(@NotNull Transcoder<D> coder, @NotNull NBTComponent<?, ?> value, @NotNull MapBuilder<D> map) {
+        public <D> Result<D> encodeToMap(Transcoder<D> coder, NBTComponent<?> value, MapBuilder<D> map) {
             return new Result.Error<>("NBTComponent not yet supported");
         }
     };
@@ -242,7 +305,7 @@ public final class ComponentCodecs {
                 children -> children);
         return new Codec<>() {
             @Override
-            public @NotNull <D> Result<Component> decode(@NotNull Transcoder<D> coder, @NotNull D value) {
+            public <D> Result<Component> decode(Transcoder<D> coder, D value) {
                 // A single string is a valid serialized form of a text component, try it.
                 final Result<String> stringResult = coder.getString(value);
                 if (stringResult instanceof Result.Ok(String string))
@@ -265,6 +328,7 @@ public final class ComponentCodecs {
                     case "selector" -> SELECTOR_CONTENT.decodeFromMap(coder, map);
                     case "keybind" -> KEYBIND_CONTENT.decodeFromMap(coder, map);
                     case "nbt" -> NBT_CONTENT.decodeFromMap(coder, map);
+                    case "object" -> OBJECT_CONTENT.decodeFromMap(coder, map);
                     case null, default -> {
                         // Type was not included, try to guess based on the content.
                         final Result<? extends Component> textResult = TEXT_CONTENT.decodeFromMap(coder, map);
@@ -285,6 +349,9 @@ public final class ComponentCodecs {
                         final Result<? extends Component> nbtResult = NBT_CONTENT.decodeFromMap(coder, map);
                         if (nbtResult instanceof Result.Ok<? extends Component>)
                             yield nbtResult;
+                        final Result<? extends Component> objectResult = OBJECT_CONTENT.decodeFromMap(coder, map);
+                        if (objectResult instanceof Result.Ok<? extends Component>)
+                            yield objectResult;
                         yield new Result.Error<>("Unable to determine component type");
                     }
                 };
@@ -295,7 +362,7 @@ public final class ComponentCodecs {
             }
 
             @Override
-            public @NotNull <D> Result<D> encode(@NotNull Transcoder<D> coder, @Nullable Component value) {
+            public <D> Result<D> encode(Transcoder<D> coder, @Nullable Component value) {
                 if (value == null) return new Result.Error<>("null");
 
                 // As a special case we want to encode text components with no children or styling as strings directly.
@@ -312,8 +379,8 @@ public final class ComponentCodecs {
                     case SelectorComponent selectorComponent ->
                             SELECTOR_CONTENT.encodeToMap(coder, selectorComponent, map);
                     case KeybindComponent keybindComponent -> KEYBIND_CONTENT.encodeToMap(coder, keybindComponent, map);
-                    case NBTComponent<?, ?> nbtComponent -> NBT_CONTENT.encodeToMap(coder, nbtComponent, map);
-                    default -> new Result.Error<>("Unknown component type: " + value.getClass());
+                    case NBTComponent<?> nbtComponent -> NBT_CONTENT.encodeToMap(coder, nbtComponent, map);
+                    case ObjectComponent objectComponent -> OBJECT_CONTENT.encodeToMap(coder, objectComponent, map);
                 };
 
                 return baseResult

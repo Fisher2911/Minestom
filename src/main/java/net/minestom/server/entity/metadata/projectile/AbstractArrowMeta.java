@@ -4,10 +4,10 @@ import net.minestom.server.entity.Entity;
 import net.minestom.server.entity.MetadataDef;
 import net.minestom.server.entity.MetadataHolder;
 import net.minestom.server.entity.metadata.EntityMeta;
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class AbstractArrowMeta extends EntityMeta {
-    protected AbstractArrowMeta(@NotNull Entity entity, @NotNull MetadataHolder metadata) {
+    protected AbstractArrowMeta(@Nullable Entity entity, MetadataHolder metadata) {
         super(entity, metadata);
     }
 

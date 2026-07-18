@@ -1,11 +1,9 @@
 package net.minestom.server.command;
 
-import net.kyori.adventure.audience.MessageType;
 import net.kyori.adventure.identity.Identity;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.minestom.server.tag.TagHandler;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
@@ -37,12 +35,12 @@ public class CommandSenderTest {
         private Component mostRecentMessage = null;
 
         @Override
-        public @NotNull TagHandler tagHandler() {
+        public TagHandler tagHandler() {
             return handler;
         }
 
         @Override
-        public void sendMessage(@NotNull Identity source, @NotNull Component message, @NotNull MessageType type) {
+        public void sendMessage(Component message) {
             mostRecentMessage = message;
         }
 
@@ -51,7 +49,7 @@ public class CommandSenderTest {
         }
 
         @Override
-        public @NotNull Identity identity() {
+        public Identity identity() {
             return Identity.nil();
         }
     }

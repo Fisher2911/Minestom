@@ -7,7 +7,6 @@ import net.kyori.adventure.nbt.api.BinaryTagHolder;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.translation.GlobalTranslator;
 import net.kyori.adventure.util.Codec;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -33,10 +32,6 @@ public final class MinestomAdventure {
     public static final Codec<CompoundBinaryTag, String, IOException, IOException> NBT_CODEC
             = Codec.codec(tagStringIO::asCompound, tagStringIO::asString);
 
-    /**
-     * If components should be automatically translated in outgoing packets.
-     */
-    public static boolean AUTOMATIC_COMPONENT_TRANSLATION = false;
     // todo: Need to properly add a translator interface so it can check for presence of a key for the flattener.
     public static BiFunction<Component, Locale, Component> COMPONENT_TRANSLATOR = GlobalTranslator::render;
 
@@ -52,7 +47,7 @@ public final class MinestomAdventure {
      *
      * @return the tag string IO instance
      */
-    public static @NotNull TagStringIO tagStringIO() {
+    public static TagStringIO tagStringIO() {
         return tagStringIO;
     }
 
@@ -61,7 +56,7 @@ public final class MinestomAdventure {
      *
      * @return the default locale
      */
-    public static @NotNull Locale getDefaultLocale() {
+    public static Locale getDefaultLocale() {
         return defaultLocale;
     }
 
@@ -74,11 +69,11 @@ public final class MinestomAdventure {
         MinestomAdventure.defaultLocale = Objects.requireNonNullElseGet(defaultLocale, Locale::getDefault);
     }
 
-    public static @NotNull BinaryTagHolder wrapNbt(@NotNull BinaryTag nbt) {
+    public static BinaryTagHolder wrapNbt(BinaryTag nbt) {
         return new BinaryTagHolderImpl(nbt);
     }
 
-    public static @NotNull BinaryTag unwrapNbt(@NotNull BinaryTagHolder holder) {
+    public static BinaryTag unwrapNbt(BinaryTagHolder holder) {
         if (holder instanceof BinaryTagHolderImpl(BinaryTag nbt))
             return nbt;
         try {

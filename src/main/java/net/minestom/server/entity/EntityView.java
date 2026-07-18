@@ -8,7 +8,6 @@ import net.minestom.server.ServerFlag;
 import net.minestom.server.coordinate.Point;
 import net.minestom.server.instance.EntityTracker;
 import net.minestom.server.instance.Instance;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -29,52 +28,91 @@ final class EntityView {
     final Set<Player> set = new SetImpl();
     private final Object mutex = this;
 
-    private volatile TrackedLocation trackedLocation;
+    private volatile @Nullable TrackedLocation trackedLocation;
 
     public EntityView(Entity entity) {
         this.entity = entity;
         this.viewableOption = new Option<>(EntityTracker.Target.PLAYERS, Entity::autoViewEntities,
-                player -> {
-                    // Add viewable
-                    var lock1 = player.getEntityId() < entity.getEntityId() ? player : entity;
-                    var lock2 = lock1 == entity ? player : entity;
-                    synchronized (lock1.viewEngine.mutex) {
-                        synchronized (lock2.viewEngine.mutex) {
-                            if (!entity.viewEngine.viewableOption.predicate(player) ||
-                                    !player.viewEngine.viewerOption.predicate(entity)) return;
-                            entity.viewEngine.viewableOption.register(player);
-                            player.viewEngine.viewerOption.register(entity);
-                        }
-                    }
-                    // Entity#updateNewViewer handles calling itself for passengers
-                    if (entity.getVehicle() != null) return;
-                    entity.updateNewViewer(player);
-                },
-                player -> {
-                    // Remove viewable
-                    var lock1 = player.getEntityId() < entity.getEntityId() ? player : entity;
-                    var lock2 = lock1 == entity ? player : entity;
-                    synchronized (lock1.viewEngine.mutex) {
-                        synchronized (lock2.viewEngine.mutex) {
-                            entity.viewEngine.viewableOption.unregister(player);
-                            player.viewEngine.viewerOption.unregister(entity);
-                        }
-                    }
-                    entity.updateOldViewer(player);
-                });
+                player -> showEntityToPlayer(this.entity, player),
+                player -> hideEntityFromPlayer(this.entity, player)
+        );
         this.viewerOption = new Option<>(EntityTracker.Target.ENTITIES, Entity::isAutoViewable,
                 entity instanceof Player player ? e -> e.viewEngine.viewableOption.addition.accept(player) : null,
                 entity instanceof Player player ? e -> e.viewEngine.viewableOption.removal.accept(player) : null);
     }
 
-    public void updateTracker(@Nullable Instance instance, @NotNull Point point) {
+    private static void showEntityToPlayer(Entity entity, Player player) {
+        // Collects the chain of entities, including the vehicle and all passengers, that should be visible to the player.
+        List<Entity> visibleChain = new ArrayList<>();
+        collectEntityChain(entity, player, visibleChain);
+
+        if (visibleChain.isEmpty()) return;
+
+        // Send spawn packets
+        for (Entity e : visibleChain) {
+            e.updateNewViewer(player);
+        }
+
+        // Send passenger packets (in reverse order)
+        for (int i = visibleChain.size() - 1; i >= 0; i--) {
+            Entity e = visibleChain.get(i);
+            if (e.hasPassenger() && e.getPassengers().stream().anyMatch(visibleChain::contains)) {
+                player.sendPacket(e.getPassengersPacket());
+            }
+        }
+    }
+
+    private static void collectEntityChain(Entity entity, Player player, List<Entity> chain) {
+        var lock1 = player.getEntityId() < entity.getEntityId() ? player : entity;
+        var lock2 = lock1 == entity ? player : entity;
+        boolean shouldAdd = false;
+        synchronized (lock1.viewEngine.mutex) {
+            synchronized (lock2.viewEngine.mutex) {
+                if (!entity.isViewer(player) &&
+                        player.getVehicle() != entity &&
+                        entity.viewEngine.viewableOption.predicate(player) &&
+                        player.viewEngine.viewerOption.predicate(entity)) {
+
+                    entity.viewEngine.viewableOption.register(player);
+                    player.viewEngine.viewerOption.register(entity);
+                    shouldAdd = true;
+                }
+            }
+        }
+        if (shouldAdd) {
+            chain.add(entity);
+            for (Entity passenger : entity.getPassengers()) {
+                collectEntityChain(passenger, player, chain);
+            }
+        }
+    }
+
+    private static void hideEntityFromPlayer(Entity entity, Player player) {
+        var lock1 = player.getEntityId() < entity.getEntityId() ? player : entity;
+        var lock2 = lock1 == entity ? player : entity;
+        synchronized (lock1.viewEngine.mutex) {
+            synchronized (lock2.viewEngine.mutex) {
+                entity.viewEngine.viewableOption.unregister(player);
+                player.viewEngine.viewerOption.unregister(entity);
+            }
+        }
+        entity.updateOldViewer(player);
+        final List<Entity> passengers = entity.getPassengers();
+        if (!passengers.isEmpty()) {
+            for (Entity passenger : passengers) {
+                if (passenger != player) hideEntityFromPlayer(passenger, player);
+            }
+        }
+    }
+
+    public void updateTracker(@Nullable Instance instance, Point point) {
         this.trackedLocation = instance != null ? new TrackedLocation(instance, point) : null;
     }
 
     record TrackedLocation(Instance instance, Point point) {
     }
 
-    public boolean manualAdd(@NotNull Player player) {
+    public boolean manualAdd(Player player) {
         if (player == this.entity) return false;
         synchronized (mutex) {
             if (manualViewers.add(player)) {
@@ -85,7 +123,7 @@ final class EntityView {
         }
     }
 
-    public boolean manualRemove(@NotNull Player player) {
+    public boolean manualRemove(Player player) {
         if (player == this.entity) return false;
         synchronized (mutex) {
             if (manualViewers.remove(player)) {
@@ -96,7 +134,7 @@ final class EntityView {
         }
     }
 
-    public void forManuals(@NotNull Consumer<Player> consumer) {
+    public void forManuals(Consumer<? super Player> consumer) {
         synchronized (mutex) {
             Set<Player> manualViewersCopy = Set.copyOf(this.manualViewers);
             manualViewersCopy.forEach(consumer);
@@ -118,7 +156,7 @@ final class EntityView {
         handleAutoView(entity, viewerOption.removal, viewableOption.removal);
     }
 
-    private void handleAutoView(Entity entity, Consumer<Entity> viewer, Consumer<Player> viewable) {
+    private void handleAutoView(Entity entity, @Nullable Consumer<Entity> viewer, @Nullable Consumer<Player> viewable) {
         if (this.entity instanceof Player && viewerOption.isAuto() && entity.isAutoViewable()) {
             if (viewer != null) viewer.accept(entity); // Send packet to this player
         }
@@ -135,17 +173,17 @@ final class EntityView {
         // The condition that must be met for this option to be considered auto.
         private final Predicate<T> loopPredicate;
         // The consumers to be called when an entity is added/removed.
-        public final Consumer<T> addition, removal;
+        public final @Nullable Consumer<T> addition, removal;
         // Contains all the auto-entity ids that are viewable by this option.
         public final IntSet bitSet = new IntOpenHashSet();
         // 1 if auto, 0 if manual
         private volatile int auto = 1;
         // The custom rule used to determine if an entity is viewable.
         // null if auto-viewable
-        private Predicate<T> predicate = null;
+        private @Nullable Predicate<? super T> predicate = null;
 
         public Option(EntityTracker.Target<T> target, Predicate<T> loopPredicate,
-                      Consumer<T> addition, Consumer<T> removal) {
+                      @Nullable Consumer<T> addition, @Nullable Consumer<T> removal) {
             this.target = target;
             this.loopPredicate = loopPredicate;
             this.addition = addition;
@@ -157,7 +195,7 @@ final class EntityView {
         }
 
         public boolean predicate(T entity) {
-            final Predicate<T> predicate = this.predicate;
+            final Predicate<? super T> predicate = this.predicate;
             return predicate == null || predicate.test(entity);
         }
 
@@ -184,7 +222,7 @@ final class EntityView {
             }
         }
 
-        public void updateRule(Predicate<T> predicate) {
+        public void updateRule(@Nullable Predicate<? super T> predicate) {
             synchronized (mutex) {
                 this.predicate = predicate;
                 updateRule0(predicate);
@@ -197,7 +235,7 @@ final class EntityView {
             }
         }
 
-        void updateRule0(Predicate<T> predicate) {
+        void updateRule0(@Nullable Predicate<? super T> predicate) {
             if (predicate == null) {
                 update(loopPredicate, entity -> {
                     if (!isRegistered(entity)) addition.accept(entity);
@@ -213,7 +251,7 @@ final class EntityView {
             }
         }
 
-        private void update(Predicate<T> visibilityPredicate,
+        private void update(Predicate<? super T> visibilityPredicate,
                             Consumer<T> action) {
             references().forEach(entity -> {
                 if (entity == EntityView.this.entity || !visibilityPredicate.test(entity)) return;
@@ -241,7 +279,7 @@ final class EntityView {
 
     final class SetImpl extends AbstractSet<Player> {
         @Override
-        public @NotNull Iterator<Player> iterator() {
+        public Iterator<Player> iterator() {
             List<Player> players;
             synchronized (mutex) {
                 var bitSet = viewableOption.bitSet;
@@ -261,7 +299,13 @@ final class EntityView {
         @Override
         public int size() {
             synchronized (mutex) {
-                return viewableOption.bitSet.size();
+                Instance instance = entity.getInstance();
+                if (instance == null) return 0;
+                int count = 0;
+                for (IntIterator it = viewableOption.bitSet.intIterator(); it.hasNext(); ) {
+                    if (instance.getEntityById(it.nextInt()) != null) count++;
+                }
+                return count;
             }
         }
 

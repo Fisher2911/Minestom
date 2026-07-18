@@ -4,23 +4,23 @@ import net.kyori.adventure.key.Key;
 import net.minestom.server.codec.Codec;
 import net.minestom.server.codec.StructCodec;
 import net.minestom.server.network.NetworkBuffer;
+import net.minestom.server.registry.BuiltinRegistries;
 import net.minestom.server.registry.DynamicRegistry;
 import net.minestom.server.registry.Registries;
-import net.minestom.server.registry.RegistryData;
 import net.minestom.server.registry.RegistryKey;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.NotNull;
 
 public sealed interface CatVariant extends CatVariants permits CatVariantImpl {
     Codec<CatVariant> REGISTRY_CODEC = StructCodec.struct(
             "asset_id", Codec.KEY, CatVariant::assetId,
-            CatVariantImpl::new);
+            "baby_asset_id", Codec.KEY, CatVariant::babyAssetId,
+            CatVariant::create);
 
-    @NotNull NetworkBuffer.Type<RegistryKey<CatVariant>> NETWORK_TYPE = RegistryKey.networkType(Registries::catVariant);
-    @NotNull Codec<RegistryKey<CatVariant>> NBT_TYPE = RegistryKey.codec(Registries::catVariant);
+    NetworkBuffer.Type<RegistryKey<CatVariant>> NETWORK_TYPE = RegistryKey.networkType(Registries::catVariant);
+    Codec<RegistryKey<CatVariant>> NBT_TYPE = RegistryKey.codec(Registries::catVariant);
 
-    static @NotNull CatVariant create(@NotNull Key assetId) {
-        return new CatVariantImpl(assetId);
+    static CatVariant create(Key assetId, Key babyAssetId) {
+        return new CatVariantImpl(assetId, babyAssetId);
     }
 
     /**
@@ -30,9 +30,10 @@ public sealed interface CatVariant extends CatVariants permits CatVariantImpl {
      */
     @ApiStatus.Internal
     static DynamicRegistry<CatVariant> createDefaultRegistry() {
-        return DynamicRegistry.create(Key.key("cat_variant"), REGISTRY_CODEC, RegistryData.Resource.CAT_VARIANTS);
+        return DynamicRegistry.create(BuiltinRegistries.CAT_VARIANT, REGISTRY_CODEC);
     }
 
-    @NotNull Key assetId();
+    Key assetId();
 
+    Key babyAssetId();
 }

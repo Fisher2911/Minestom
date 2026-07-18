@@ -4,10 +4,10 @@ import net.minestom.server.entity.Entity;
 import net.minestom.server.entity.MetadataDef;
 import net.minestom.server.entity.MetadataHolder;
 import net.minestom.server.entity.metadata.monster.MonsterMeta;
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class RaiderMeta extends MonsterMeta {
-    protected RaiderMeta(@NotNull Entity entity, @NotNull MetadataHolder metadata) {
+    protected RaiderMeta(@Nullable Entity entity, MetadataHolder metadata) {
         super(entity, metadata);
     }
 

@@ -1,18 +1,18 @@
 package net.minestom.server.message;
 
 import net.kyori.adventure.text.format.Style;
+import net.kyori.adventure.translation.Translatable;
 import net.minestom.server.codec.Codec;
 import net.minestom.server.codec.ComponentCodecs;
 import net.minestom.server.codec.StructCodec;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
 public record ChatTypeDecoration(
-        @NotNull String translationKey,
-        @NotNull List<Parameter> parameters,
-        @NotNull Style style
-) {
+        String translationKey,
+        List<Parameter> parameters,
+        Style style
+) implements Translatable {
     public static final Codec<ChatTypeDecoration> CODEC = StructCodec.struct(
             "translation_key", Codec.STRING, ChatTypeDecoration::translationKey,
             "parameters", Parameter.CODEC.list().optional(List.of()), ChatTypeDecoration::parameters,

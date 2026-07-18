@@ -2,12 +2,13 @@ package net.minestom.server.item.component;
 
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.minestom.server.adventure.MinestomAdventure;
+import net.minestom.server.codec.Transcoder;
 import net.minestom.server.component.DataComponent;
 import net.minestom.server.component.DataComponents;
+import net.minestom.server.entity.EntityType;
 import net.minestom.server.item.ItemStack;
 import net.minestom.server.item.Material;
 import net.minestom.server.tag.Tag;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -22,18 +23,16 @@ public class CustomDataTest extends AbstractItemComponentTest<CustomData> {
     // as a reminder that tests should be added for that new component type.
     private static final List<DataComponent<CustomData>> SHARED_COMPONENTS = List.of(
             DataComponents.CUSTOM_DATA,
-            DataComponents.ENTITY_DATA,
-            DataComponents.BUCKET_ENTITY_DATA,
-            DataComponents.BLOCK_ENTITY_DATA
+            DataComponents.BUCKET_ENTITY_DATA
     );
 
     @Override
-    protected @NotNull DataComponent<CustomData> component() {
+    protected DataComponent<CustomData> component() {
         return SHARED_COMPONENTS.getFirst();
     }
 
     @Override
-    protected @NotNull List<Map.Entry<String, CustomData>> directReadWriteEntries() {
+    protected List<Map.Entry<String, CustomData>> directReadWriteEntries() {
         return List.of(
                 entry("simple", new CustomData(CompoundBinaryTag.builder()
                         .putString("hello", "world")
@@ -51,5 +50,13 @@ public class CustomDataTest extends AbstractItemComponentTest<CustomData> {
                 .build();
         final String snbt = MinestomAdventure.tagStringIO().asString(item.get(DataComponents.CUSTOM_DATA).nbt());
         assertEquals("{test:{num:5}}", snbt);
+    }
+
+    @Test
+    void typedCustomDataWrite() throws IOException {
+        var component = new TypedCustomData<>(EntityType.COD, CompoundBinaryTag.builder().putFloat("Health", 1.5f).build());
+        var nbt = TypedCustomData.codec(EntityType.CODEC).encode(Transcoder.NBT, component).orElseThrow();
+        final String snbt = MinestomAdventure.tagStringIO().asString(nbt);
+        assertEquals("{Health:1.5f,id:\"minecraft:cod\"}", snbt);
     }
 }

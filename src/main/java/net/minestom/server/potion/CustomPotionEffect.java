@@ -4,7 +4,6 @@ import net.minestom.server.codec.Codec;
 import net.minestom.server.codec.StructCodec;
 import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.network.NetworkBufferTemplate;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
@@ -15,7 +14,7 @@ import static net.minestom.server.network.NetworkBuffer.VAR_INT;
 /**
  * Represents a custom effect in {@link net.minestom.server.component.DataComponents#POTION_CONTENTS}.
  */
-public record CustomPotionEffect(@NotNull PotionEffect id, @NotNull Settings settings) {
+public record CustomPotionEffect(PotionEffect id, Settings settings) {
 
     public static final NetworkBuffer.Type<CustomPotionEffect> NETWORK_TYPE = NetworkBufferTemplate.template(
             PotionEffect.NETWORK_TYPE, CustomPotionEffect::id,
@@ -26,7 +25,7 @@ public record CustomPotionEffect(@NotNull PotionEffect id, @NotNull Settings set
             StructCodec.INLINE, Settings.CODEC, CustomPotionEffect::settings,
             CustomPotionEffect::new);
 
-    public CustomPotionEffect(@NotNull PotionEffect id, int amplifier, int duration, boolean isAmbient, boolean showParticles, boolean showIcon) {
+    public CustomPotionEffect(PotionEffect id, int amplifier, int duration, boolean isAmbient, boolean showParticles, boolean showIcon) {
         this(id, new Settings(amplifier, duration, isAmbient, showParticles, showIcon, null));
     }
 
@@ -55,29 +54,16 @@ public record CustomPotionEffect(@NotNull PotionEffect id, @NotNull Settings set
             boolean isAmbient, boolean showParticles, boolean showIcon,
             @Nullable Settings hiddenEffect
     ) {
-        public static final NetworkBuffer.Type<Settings> NETWORK_TYPE = new NetworkBuffer.Type<>() {
-            @Override
-            public void write(@NotNull NetworkBuffer buffer, Settings value) {
-                buffer.write(VAR_INT, value.amplifier);
-                buffer.write(VAR_INT, value.duration);
-                buffer.write(BOOLEAN, value.isAmbient);
-                buffer.write(BOOLEAN, value.showParticles);
-                buffer.write(BOOLEAN, value.showIcon);
-                buffer.write(NETWORK_TYPE.optional(), value.hiddenEffect);
-            }
-
-            @Override
-            public Settings read(@NotNull NetworkBuffer buffer) {
-                return new Settings(
-                        buffer.read(VAR_INT),
-                        buffer.read(VAR_INT),
-                        buffer.read(BOOLEAN),
-                        buffer.read(BOOLEAN),
-                        buffer.read(BOOLEAN),
-                        buffer.read(NETWORK_TYPE.optional())
-                );
-            }
-        };
+        public static final NetworkBuffer.Type<Settings> NETWORK_TYPE = NetworkBuffer.Recursive(self ->
+                NetworkBufferTemplate.template(
+                        VAR_INT, Settings::amplifier,
+                        VAR_INT, Settings::duration,
+                        BOOLEAN, Settings::isAmbient,
+                        BOOLEAN, Settings::showParticles,
+                        BOOLEAN, Settings::showIcon,
+                        self.optional(), Settings::hiddenEffect,
+                        Settings::new
+                ));
         public static final Codec<Settings> CODEC = Codec.Recursive(self -> StructCodec.struct(
                 "amplifier", Codec.BYTE.optional((byte) 0), s -> (byte) s.amplifier,
                 "duration", Codec.INT.optional(0), Settings::duration,
@@ -89,7 +75,7 @@ public record CustomPotionEffect(@NotNull PotionEffect id, @NotNull Settings set
         ));
 
         // Exists because showIcon needs to default to the value of showParticles which we can't do inline.
-        private static @NotNull Settings withOptionalIcon(
+        private static Settings withOptionalIcon(
                 byte amplifier, int duration,
                 boolean isAmbient, boolean showParticles,
                 @Nullable Boolean showIcon,

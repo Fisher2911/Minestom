@@ -1,11 +1,10 @@
 package net.minestom.server.item.component;
 
-import net.minestom.server.MinecraftServer;
 import net.minestom.server.component.DataComponent;
 import net.minestom.server.component.DataComponents;
 import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.utils.Unit;
-import org.jetbrains.annotations.NotNull;
+import net.minestom.testing.Env;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -25,24 +24,20 @@ public class UnitTest extends AbstractItemComponentTest<Unit> {
             DataComponents.UNBREAKABLE
     );
 
-    static {
-        MinecraftServer.init();
-    }
-
     @Override
-    protected @NotNull DataComponent<Unit> component() {
+    protected DataComponent<Unit> component() {
         return UNIT_COMPONENTS.getFirst();
     }
 
     @Override
-    protected @NotNull List<Map.Entry<String, Unit>> directReadWriteEntries() {
+    protected List<Map.Entry<String, Unit>> directReadWriteEntries() {
         return List.of(
                 entry("instance", Unit.INSTANCE)
         );
     }
 
     @Test
-    public void ensureUnitComponentsPresent() {
+    public void ensureUnitComponentsPresent(Env env) {
         var fails = new ArrayList<String>();
         for (var component : DataComponent.values()) {
             if (!component.isSynced()) continue;
@@ -50,7 +45,7 @@ public class UnitTest extends AbstractItemComponentTest<Unit> {
             // Try to write as a Unit and if it fails we can ignore that type
             try {
                 //noinspection unchecked
-                ((DataComponent<Unit>) component).write(NetworkBuffer.resizableBuffer(MinecraftServer.process()), Unit.INSTANCE);
+                ((DataComponent<Unit>) component).write(NetworkBuffer.resizableBuffer(env.process()), Unit.INSTANCE);
             } catch (ClassCastException | IllegalArgumentException ignored) {
                 continue;
             }

@@ -1,26 +1,21 @@
 package net.minestom.server.command;
 
-import net.minestom.server.MinecraftServer;
 import net.minestom.server.command.builder.Command;
 import net.minestom.server.command.builder.CommandContext;
 import net.minestom.server.command.builder.arguments.ArgumentType;
 import net.minestom.server.network.packet.server.play.DeclareCommandsPacket;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class CommandPacketTest {
-    static {
-        MinecraftServer.init();
-    }
 
     @Test
     public void singleCommandWithOneSyntax() {
         final Command foo = new Command("foo");
         foo.addSyntax(CommandPacketTest::dummyExecutor, ArgumentType.Integer("bar"));
 
-        final DeclareCommandsPacket packet = GraphConverter.createPacket(Graph.merge(Graph.fromCommand(foo)), null);
+        final DeclareCommandsPacket packet = GraphConverter.createPacket(new CommandManager(), Graph.merge(Graph.fromCommand(foo)), null);
         assertEquals(3, packet.nodes().size());
         final DeclareCommandsPacket.Node root = packet.nodes().get(packet.rootIndex());
         assertNotNull(root);
@@ -34,6 +29,7 @@ public class CommandPacketTest {
         final DeclareCommandsPacket.Node arg = packet.nodes().get(cmd.children[0]);
         assertNotNull(arg);
         assertNodeType(DeclareCommandsPacket.NodeType.ARGUMENT, arg.flags);
+        assertExecutable(arg.flags);
         assertEquals(0, arg.children.length);
         assertEquals("bar", arg.name);
     }
@@ -233,7 +229,7 @@ public class CommandPacketTest {
     }
 
     static void assertPacketGraph(String expected, Graph... graphs) {
-        var packet = GraphConverter.createPacket(Graph.merge(graphs), null);
+        var packet = GraphConverter.createPacket(new CommandManager(), Graph.merge(graphs), null);
         CommandTestUtils.assertPacket(packet, expected);
     }
 
@@ -245,6 +241,10 @@ public class CommandPacketTest {
 
     private static void assertNodeType(DeclareCommandsPacket.NodeType expected, byte flags) {
         assertEquals(expected, DeclareCommandsPacket.NodeType.values()[flags & 0x03]);
+    }
+
+    private static void assertExecutable(byte flags) {
+        assertTrue((flags & DeclareCommandsPacket.IS_EXECUTABLE) != 0);
     }
 
     private static void dummyExecutor(CommandSender sender, CommandContext context) {

@@ -2,28 +2,23 @@ package net.minestom.server.instance.anvil;
 
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
-import net.minestom.server.MinecraftServer;
 import net.minestom.server.coordinate.BlockVec;
-import net.minestom.server.coordinate.CoordConversion;
 import net.minestom.server.coordinate.Point;
 import net.minestom.server.instance.Chunk;
 import net.minestom.server.instance.Instance;
 import net.minestom.server.instance.Section;
 import net.minestom.server.instance.block.Block;
 import net.minestom.server.instance.block.BlockHandler;
-import net.minestom.server.instance.palette.Palette;
 import net.minestom.server.network.NetworkBuffer;
+import net.minestom.server.network.packet.server.play.data.ChunkData;
 import net.minestom.server.registry.RegistryKey;
 import net.minestom.server.world.biome.Biome;
 import net.minestom.testing.Env;
 import net.minestom.testing.EnvTest;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
-import org.junit.jupiter.params.provider.ValueSources;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -33,7 +28,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-import static net.minestom.server.network.NetworkBuffer.SHORT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -108,7 +102,8 @@ public class AnvilLoaderIntegrationTest {
         Instance instance = env.createFlatInstance(chunkLoader);
 
         Consumer<Chunk> checkChunk = chunk -> {
-            synchronized (chunk) {
+            chunk.lockReadLock();
+            try {
                 assertEquals(-4, chunk.getMinSection());
                 assertEquals(20, chunk.getMaxSection());
 
@@ -120,6 +115,8 @@ public class AnvilLoaderIntegrationTest {
                         }
                     }
                 }
+            } finally {
+                chunk.unlockReadLock();
             }
         };
 
@@ -208,18 +205,12 @@ public class AnvilLoaderIntegrationTest {
             Section originalSection = originalChunk.getSection(section);
             Section reloadedSection = reloadedChunk.getSection(section);
 
-            NetworkBuffer.Type<Palette> biomeSerializer = Palette.biomeSerializer(MinecraftServer.getBiomeRegistry().size());
+            NetworkBuffer.Type<ChunkData.Section> sectionSerializer = ChunkData.Section.networkType(env.process().biome().size());
             // easiest equality check to write is a memory compare on written output
-            var original = NetworkBuffer.makeArray(buffer -> {
-                buffer.write(SHORT, (short) originalSection.blockPalette().count());
-                buffer.write(Palette.BLOCK_SERIALIZER, originalSection.blockPalette());
-                buffer.write(biomeSerializer, originalSection.biomePalette());
-            });
-            var reloaded = NetworkBuffer.makeArray(buffer -> {
-                buffer.write(SHORT, (short) reloadedSection.blockPalette().count());
-                buffer.write(Palette.BLOCK_SERIALIZER, reloadedSection.blockPalette());
-                buffer.write(biomeSerializer, reloadedSection.biomePalette());
-            });
+            var original = NetworkBuffer.makeArray(buffer ->
+                    buffer.write(sectionSerializer, new ChunkData.Section((short) originalSection.blockPalette().count(), (short) 0, originalSection.blockPalette(), originalSection.biomePalette())));
+            var reloaded = NetworkBuffer.makeArray(buffer ->
+                    buffer.write(sectionSerializer, new ChunkData.Section((short) reloadedSection.blockPalette().count(), (short) 0, reloadedSection.blockPalette(), reloadedSection.biomePalette())));
             Assertions.assertArrayEquals(original, reloaded);
         }
     }
@@ -267,7 +258,7 @@ public class AnvilLoaderIntegrationTest {
 
         var handler = new BlockHandler() {
             @Override
-            public @NotNull Key getKey() {
+            public Key getKey() {
                 return Key.key("test");
             }
         };
@@ -296,12 +287,12 @@ public class AnvilLoaderIntegrationTest {
 
         var handler = new BlockHandler() {
             @Override
-            public @NotNull Key getKey() {
+            public Key getKey() {
                 return Block.DIAMOND_BLOCK.key();
             }
 
             @Override
-            public void onPlace(@NotNull Placement placement) {
+            public void onPlace(Placement placement) {
                 assertEquals(point.x(), placement.getBlockPosition().x());
                 assertEquals(point.y(), placement.getBlockPosition().y());
                 assertEquals(point.z(), placement.getBlockPosition().z());
@@ -374,20 +365,20 @@ public class AnvilLoaderIntegrationTest {
         }
     }
 
-    private static Path extractWorld(@NotNull String resourceName) throws IOException {
+    private static Path extractWorld(String resourceName) throws IOException {
         final Path worldFolder = Files.createTempDirectory("minestom-test-world-" + resourceName);
 
         // https://stackoverflow.com/a/60621544
         Files.walkFileTree(WORLD_RESOURCES.resolve(resourceName), new SimpleFileVisitor<>() {
             @Override
-            public @NotNull FileVisitResult preVisitDirectory(@NotNull Path dir, @NotNull BasicFileAttributes attrs)
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
                     throws IOException {
                 Files.createDirectories(worldFolder.resolve(WORLD_RESOURCES.relativize(dir)));
                 return FileVisitResult.CONTINUE;
             }
 
             @Override
-            public @NotNull FileVisitResult visitFile(@NotNull Path file, @NotNull BasicFileAttributes attrs)
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
                     throws IOException {
                 Files.copy(file, worldFolder.resolve(WORLD_RESOURCES.relativize(file)), StandardCopyOption.REPLACE_EXISTING);
                 return FileVisitResult.CONTINUE;

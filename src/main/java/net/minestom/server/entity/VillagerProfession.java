@@ -7,7 +7,6 @@ import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.registry.RegistryData;
 import net.minestom.server.registry.StaticProtocolObject;
 import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
@@ -15,10 +14,10 @@ import java.util.Collection;
 public sealed interface VillagerProfession extends StaticProtocolObject<VillagerProfession>, VillagerProfessions permits VillagerProfessionImpl {
 
     NetworkBuffer.Type<VillagerProfession> NETWORK_TYPE = NetworkBuffer.VAR_INT.transform(VillagerProfession::fromId, VillagerProfession::id);
-    Codec<VillagerProfession> NBT_TYPE = Codec.STRING.transform(VillagerProfession::fromKey, VillagerProfession::name);
+    Codec<VillagerProfession> NBT_TYPE = Codec.KEY.transform(VillagerProfession::fromKey, VillagerProfession::key);
 
     @Override
-    default @NotNull Key key() {
+    default Key key() {
         return registry().key();
     }
 
@@ -28,17 +27,17 @@ public sealed interface VillagerProfession extends StaticProtocolObject<Villager
     }
 
     @Contract(pure = true)
-    @NotNull RegistryData.VillagerProfessionEntry registry();
+    RegistryData.VillagerProfessionEntry registry();
 
-    static @NotNull Collection<@NotNull VillagerProfession> values() {
+    static Collection<VillagerProfession> values() {
         return VillagerProfessionImpl.REGISTRY.values();
     }
 
-    static @Nullable VillagerProfession fromKey(@KeyPattern @NotNull String key) {
+    static @Nullable VillagerProfession fromKey(@KeyPattern String key) {
         return fromKey(Key.key(key));
     }
 
-    static @Nullable VillagerProfession fromKey(@NotNull Key key) {
+    static @Nullable VillagerProfession fromKey(Key key) {
         return VillagerProfessionImpl.REGISTRY.get(key);
     }
 

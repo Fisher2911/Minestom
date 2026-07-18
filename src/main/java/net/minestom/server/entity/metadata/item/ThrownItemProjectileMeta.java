@@ -5,19 +5,18 @@ import net.minestom.server.entity.MetadataDef;
 import net.minestom.server.entity.MetadataHolder;
 import net.minestom.server.entity.metadata.EntityMeta;
 import net.minestom.server.item.ItemStack;
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 class ThrownItemProjectileMeta extends EntityMeta {
-    protected ThrownItemProjectileMeta(@NotNull Entity entity, @NotNull MetadataHolder metadata) {
+    protected ThrownItemProjectileMeta(@Nullable Entity entity, MetadataHolder metadata) {
         super(entity, metadata);
     }
 
-    @NotNull
     public ItemStack getItem() {
         return metadata.get(MetadataDef.ThrownItemProjectile.ITEM);
     }
 
-    public void setItem(@NotNull ItemStack item) {
+    public void setItem(ItemStack item) {
         metadata.set(MetadataDef.ThrownItemProjectile.ITEM, item);
     }
 

@@ -7,17 +7,16 @@ import net.minestom.server.gamedata.DataPack;
 import net.minestom.server.registry.DynamicRegistry;
 import net.minestom.server.registry.Registries;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
 public non-sealed interface LocationEffect extends Enchantment.Effect {
 
-    @NotNull StructCodec<LocationEffect> CODEC = Codec.RegistryTaggedUnion(
-            Registries::enchantmentLocationEffects, LocationEffect::codec, "type");
+    StructCodec<LocationEffect> CODEC = Codec.RegistryTaggedUnion(
+            Registries::enchantmentLocationEffects, LocationEffect::codec);
 
     @ApiStatus.Internal
-    static @NotNull DynamicRegistry<StructCodec<? extends LocationEffect>> createDefaultRegistry() {
+    static DynamicRegistry<StructCodec<? extends LocationEffect>> createDefaultRegistry() {
         final DynamicRegistry<StructCodec<? extends LocationEffect>> registry = DynamicRegistry.create(Key.key("minestom:enchantment_value_effect"));
         registry.register("all_of", AllOf.CODEC, DataPack.MINECRAFT_CORE);
         registry.register("apply_mob_effect", EntityEffect.ApplyPotionEffect.CODEC, DataPack.MINECRAFT_CORE);
@@ -26,6 +25,8 @@ public non-sealed interface LocationEffect extends Enchantment.Effect {
         registry.register("damage_entity", EntityEffect.DamageEntity.CODEC, DataPack.MINECRAFT_CORE);
         registry.register("explode", EntityEffect.Explode.CODEC, DataPack.MINECRAFT_CORE);
         registry.register("ignite", EntityEffect.Ignite.CODEC, DataPack.MINECRAFT_CORE);
+        registry.register("apply_impulse", EntityEffect.ApplyImpulse.CODEC, DataPack.MINECRAFT_CORE);
+        registry.register("apply_exhaustion", EntityEffect.ApplyExhaustion.CODEC, DataPack.MINECRAFT_CORE);
         registry.register("play_sound", EntityEffect.PlaySound.CODEC, DataPack.MINECRAFT_CORE);
         registry.register("replace_block", EntityEffect.ReplaceBlock.CODEC, DataPack.MINECRAFT_CORE);
         registry.register("replace_disk", EntityEffect.ReplaceDisc.CODEC, DataPack.MINECRAFT_CORE);
@@ -36,9 +37,9 @@ public non-sealed interface LocationEffect extends Enchantment.Effect {
         return registry;
     }
 
-    @NotNull StructCodec<? extends LocationEffect> codec();
+    StructCodec<? extends LocationEffect> codec();
 
-    record AllOf(@NotNull List<LocationEffect> effect) implements LocationEffect {
+    record AllOf(List<LocationEffect> effect) implements LocationEffect {
         public static final StructCodec<AllOf> CODEC = StructCodec.struct(
                 "effects", LocationEffect.CODEC.list(), AllOf::effect,
                 AllOf::new
@@ -49,7 +50,7 @@ public non-sealed interface LocationEffect extends Enchantment.Effect {
         }
 
         @Override
-        public @NotNull StructCodec<AllOf> codec() {
+        public StructCodec<AllOf> codec() {
             return CODEC;
         }
     }

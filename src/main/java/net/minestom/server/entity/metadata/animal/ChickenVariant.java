@@ -4,24 +4,24 @@ import net.kyori.adventure.key.Key;
 import net.minestom.server.codec.Codec;
 import net.minestom.server.codec.StructCodec;
 import net.minestom.server.network.NetworkBuffer;
+import net.minestom.server.registry.BuiltinRegistries;
 import net.minestom.server.registry.DynamicRegistry;
 import net.minestom.server.registry.Registries;
-import net.minestom.server.registry.RegistryData;
 import net.minestom.server.registry.RegistryKey;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.NotNull;
 
 public sealed interface ChickenVariant extends ChickenVariants permits ChickenVariantImpl {
-    @NotNull Codec<ChickenVariant> REGISTRY_CODEC = StructCodec.struct(
+    Codec<ChickenVariant> REGISTRY_CODEC = StructCodec.struct(
             "model", Model.CODEC.optional(Model.NORMAL), ChickenVariant::model,
             "asset_id", Codec.KEY, ChickenVariant::assetId,
+            "baby_asset_id", Codec.KEY, ChickenVariant::babyAssetId,
             ChickenVariantImpl::new);
 
-    @NotNull NetworkBuffer.Type<RegistryKey<ChickenVariant>> NETWORK_TYPE = RegistryKey.networkType(Registries::chickenVariant);
-    @NotNull Codec<RegistryKey<ChickenVariant>> CODEC = RegistryKey.codec(Registries::chickenVariant);
+    NetworkBuffer.Type<RegistryKey<ChickenVariant>> NETWORK_TYPE = RegistryKey.networkType(Registries::chickenVariant);
+    Codec<RegistryKey<ChickenVariant>> CODEC = RegistryKey.codec(Registries::chickenVariant);
 
-    static @NotNull ChickenVariant create(@NotNull Model model, @NotNull Key assetId) {
-        return new ChickenVariantImpl(model, assetId);
+    static ChickenVariant create(Model model, Key assetId, Key babyAssetId) {
+        return new ChickenVariantImpl(model, assetId, babyAssetId);
     }
 
     /**
@@ -31,12 +31,14 @@ public sealed interface ChickenVariant extends ChickenVariants permits ChickenVa
      */
     @ApiStatus.Internal
     static DynamicRegistry<ChickenVariant> createDefaultRegistry() {
-        return DynamicRegistry.create(Key.key("chicken_variant"), REGISTRY_CODEC, RegistryData.Resource.CHICKEN_VARIANTS);
+        return DynamicRegistry.create(BuiltinRegistries.CHICKEN_VARIANT, REGISTRY_CODEC);
     }
 
-    @NotNull Model model();
+    Model model();
 
-    @NotNull Key assetId();
+    Key assetId();
+
+    Key babyAssetId();
 
     enum Model {
         NORMAL,

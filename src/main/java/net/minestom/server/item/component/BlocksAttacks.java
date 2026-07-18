@@ -7,9 +7,7 @@ import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.network.NetworkBufferTemplate;
 import net.minestom.server.registry.Registries;
 import net.minestom.server.registry.RegistryTag;
-import net.minestom.server.registry.TagKey;
 import net.minestom.server.sound.SoundEvent;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -17,9 +15,9 @@ import java.util.List;
 public record BlocksAttacks(
         float blockDelaySeconds,
         float disableCooldownScale,
-        @NotNull List<DamageReduction> damageReductions,
-        @NotNull ItemDamageFunction itemDamage,
-        @Nullable TagKey<DamageType> bypassedBy,
+        List<DamageReduction> damageReductions,
+        ItemDamageFunction itemDamage,
+        @Nullable RegistryTag<DamageType> bypassedBy,
         @Nullable SoundEvent blockSound,
         @Nullable SoundEvent disableSound
 ) {
@@ -28,19 +26,23 @@ public record BlocksAttacks(
             NetworkBuffer.FLOAT, BlocksAttacks::disableCooldownScale,
             DamageReduction.NETWORK_TYPE.list(Short.MAX_VALUE), BlocksAttacks::damageReductions,
             ItemDamageFunction.NETWORK_TYPE, BlocksAttacks::itemDamage,
-            TagKey.networkType(Registries::damageType).optional(), BlocksAttacks::bypassedBy,
-            SoundEvent.NETWORK_TYPE, BlocksAttacks::blockSound,
-            SoundEvent.NETWORK_TYPE, BlocksAttacks::disableSound,
+            RegistryTag.networkType(Registries::damageType).optional(), BlocksAttacks::bypassedBy,
+            SoundEvent.NETWORK_TYPE.optional(), BlocksAttacks::blockSound,
+            SoundEvent.NETWORK_TYPE.optional(), BlocksAttacks::disableSound,
             BlocksAttacks::new);
     public static final Codec<BlocksAttacks> NBT_TYPE = StructCodec.struct(
             "block_delay_seconds", Codec.FLOAT.optional(0f), BlocksAttacks::blockDelaySeconds,
             "disable_cooldown_scale", Codec.FLOAT.optional(1f), BlocksAttacks::disableCooldownScale,
             "damage_reductions", DamageReduction.CODEC.list().optional(List.of(DamageReduction.DEFAULT)), BlocksAttacks::damageReductions,
             "item_damage", ItemDamageFunction.CODEC.optional(ItemDamageFunction.DEFAULT), BlocksAttacks::itemDamage,
-            "bypassed_by", TagKey.hashCodec(Registries::damageType).optional(), BlocksAttacks::bypassedBy,
+            "bypassed_by", RegistryTag.codec(Registries::damageType).optional(), BlocksAttacks::bypassedBy,
             "block_sound", SoundEvent.CODEC.optional(), BlocksAttacks::blockSound,
             "disabled_sound", SoundEvent.CODEC.optional(), BlocksAttacks::disableSound,
             BlocksAttacks::new);
+
+    public BlocksAttacks {
+        damageReductions = List.copyOf(damageReductions);
+    }
 
     public record ItemDamageFunction(float threshold, float base, float factor) {
         public static final ItemDamageFunction DEFAULT = new ItemDamageFunction(1f, 0f, 1f);

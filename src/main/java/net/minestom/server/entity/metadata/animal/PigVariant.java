@@ -4,21 +4,21 @@ import net.kyori.adventure.key.Key;
 import net.minestom.server.codec.Codec;
 import net.minestom.server.codec.StructCodec;
 import net.minestom.server.network.NetworkBuffer;
+import net.minestom.server.registry.BuiltinRegistries;
 import net.minestom.server.registry.DynamicRegistry;
 import net.minestom.server.registry.Registries;
-import net.minestom.server.registry.RegistryData;
 import net.minestom.server.registry.RegistryKey;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.NotNull;
 
 public sealed interface PigVariant extends PigVariants permits PigVariantImpl {
-    @NotNull Codec<PigVariant> REGISTRY_CODEC = StructCodec.struct(
+    Codec<PigVariant> REGISTRY_CODEC = StructCodec.struct(
             "model", Model.CODEC.optional(Model.NORMAL), PigVariant::model,
             "asset_id", Codec.KEY, PigVariant::assetId,
-            PigVariantImpl::new);
+            "baby_asset_id", Codec.KEY, PigVariant::babyAssetId,
+            PigVariant::create);
 
-    @NotNull NetworkBuffer.Type<RegistryKey<PigVariant>> NETWORK_TYPE = RegistryKey.networkType(Registries::pigVariant);
-    @NotNull Codec<RegistryKey<PigVariant>> CODEC = RegistryKey.codec(Registries::pigVariant);
+    NetworkBuffer.Type<RegistryKey<PigVariant>> NETWORK_TYPE = RegistryKey.networkType(Registries::pigVariant);
+    Codec<RegistryKey<PigVariant>> CODEC = RegistryKey.codec(Registries::pigVariant);
 
     /**
      * Creates a new instance of the "minecraft:pig_variant" registry containing the vanilla contents.
@@ -27,16 +27,18 @@ public sealed interface PigVariant extends PigVariants permits PigVariantImpl {
      */
     @ApiStatus.Internal
     static DynamicRegistry<PigVariant> createDefaultRegistry() {
-        return DynamicRegistry.create(Key.key("pig_variant"), REGISTRY_CODEC, RegistryData.Resource.PIG_VARIANTS);
+        return DynamicRegistry.create(BuiltinRegistries.PIG_VARIANT, REGISTRY_CODEC);
     }
 
-    static @NotNull PigVariant create(@NotNull Model model, @NotNull Key assetId) {
-        return new PigVariantImpl(model, assetId);
+    static PigVariant create(Model model, Key assetId, Key babyAssetId) {
+        return new PigVariantImpl(model, assetId, babyAssetId);
     }
 
-    @NotNull Model model();
+    Model model();
 
-    @NotNull Key assetId();
+    Key assetId();
+
+    Key babyAssetId();
 
     enum Model {
         NORMAL,

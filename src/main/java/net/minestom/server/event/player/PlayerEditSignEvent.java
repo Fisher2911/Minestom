@@ -4,20 +4,22 @@ import net.minestom.server.coordinate.BlockVec;
 import net.minestom.server.entity.Player;
 import net.minestom.server.event.trait.BlockEvent;
 import net.minestom.server.event.trait.PlayerInstanceEvent;
+import net.minestom.server.instance.Instance;
 import net.minestom.server.instance.block.Block;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
 public class PlayerEditSignEvent implements PlayerInstanceEvent, BlockEvent {
     private final Player player;
+    private final Instance instance;
     private final Block block;
     private final BlockVec blockPosition;
     private final List<String> lines;
     private final boolean isFrontText;
 
-    public PlayerEditSignEvent(Player player, Block block, BlockVec blockPosition, List<String> lines, boolean isFrontText) {
+    public PlayerEditSignEvent(Player player, Instance instance, Block block, BlockVec blockPosition, List<String> lines, boolean isFrontText) {
         this.player = player;
+        this.instance = instance;
         this.block = block;
         this.blockPosition = blockPosition;
         this.lines = lines;
@@ -25,17 +27,22 @@ public class PlayerEditSignEvent implements PlayerInstanceEvent, BlockEvent {
     }
 
     @Override
-    public @NotNull Player getPlayer() {
+    public Instance getInstance() {
+        return instance;
+    }
+
+    @Override
+    public Player getPlayer() {
         return player;
     }
 
     @Override
-    public @NotNull Block getBlock() {
+    public Block getBlock() {
         return block;
     }
 
     @Override
-    public @NotNull BlockVec getBlockPosition() {
+    public BlockVec getBlockPosition() {
         return blockPosition;
     }
 

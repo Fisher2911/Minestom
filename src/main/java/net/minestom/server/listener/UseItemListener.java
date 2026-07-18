@@ -13,15 +13,16 @@ import net.minestom.server.item.ItemStack;
 import net.minestom.server.item.Material;
 import net.minestom.server.item.component.Consumable;
 import net.minestom.server.item.component.Equippable;
-import net.minestom.server.item.component.InstrumentComponent;
 import net.minestom.server.item.instrument.Instrument;
 import net.minestom.server.network.packet.client.play.ClientUseItemPacket;
 import net.minestom.server.network.packet.server.play.AcknowledgeBlockChangePacket;
-import org.jetbrains.annotations.NotNull;
+import net.minestom.server.registry.Holder;
 
 public class UseItemListener {
 
     public static void useItemListener(ClientUseItemPacket packet, Player player) {
+        PlayerPositionListener.playerRotation(player, packet.yaw(), packet.pitch());
+
         final PlayerHand hand = packet.hand();
         final ItemStack itemStack = player.getItemInHand(hand);
         final Material material = itemStack.material();
@@ -40,12 +41,12 @@ public class UseItemListener {
             // client they can hold it forever
             useItemTime = 7200;
             useAnimation = ItemAnimation.CROSSBOW;
-        } else if (material == Material.SHIELD) {
+        } else if (itemStack.has(DataComponents.BLOCKS_ATTACKS)) {
             useItemTime = 72000;
             useAnimation = ItemAnimation.BLOCK;
         } else if (material == Material.TRIDENT) {
             useItemTime = 72000;
-            useAnimation = ItemAnimation.SPEAR;
+            useAnimation = ItemAnimation.TRIDENT;
         } else if (material == Material.SPYGLASS) {
             useItemTime = 1200;
             useAnimation = ItemAnimation.SPYGLASS;
@@ -62,6 +63,9 @@ public class UseItemListener {
         } else if (consumable != null) {
             useItemTime = consumable.consumeTicks();
             useAnimation = consumable.animation();
+        } else if (itemStack.has(DataComponents.KINETIC_WEAPON)) {
+            useItemTime = 72000;
+            useAnimation = ItemAnimation.SPEAR;
         }
 
         boolean usingMainHand = player.getItemUseHand() == PlayerHand.MAIN && hand == PlayerHand.OFF;
@@ -98,8 +102,8 @@ public class UseItemListener {
         }
     }
 
-    private static int getInstrumentTime(@NotNull ItemStack itemStack) {
-        final InstrumentComponent holder = itemStack.get(DataComponents.INSTRUMENT);
+    private static int getInstrumentTime(ItemStack itemStack) {
+        final Holder<Instrument> holder = itemStack.get(DataComponents.INSTRUMENT);
         if (holder == null) return 0;
 
         final Instrument instrument = holder.resolve(MinecraftServer.getInstrumentRegistry());

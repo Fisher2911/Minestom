@@ -4,24 +4,24 @@ import net.kyori.adventure.key.Key;
 import net.minestom.server.codec.Codec;
 import net.minestom.server.codec.StructCodec;
 import net.minestom.server.network.NetworkBuffer;
+import net.minestom.server.registry.BuiltinRegistries;
 import net.minestom.server.registry.DynamicRegistry;
 import net.minestom.server.registry.Registries;
-import net.minestom.server.registry.RegistryData;
 import net.minestom.server.registry.RegistryKey;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.NotNull;
 
 public sealed interface CowVariant extends CowVariants permits CowVariantImpl {
-    @NotNull Codec<CowVariant> REGISTRY_CODEC = StructCodec.struct(
+    Codec<CowVariant> REGISTRY_CODEC = StructCodec.struct(
             "model", Model.CODEC.optional(Model.NORMAL), CowVariant::model,
             "asset_id", Codec.KEY, CowVariant::assetId,
-            CowVariantImpl::new);
+            "baby_asset_id", Codec.KEY, CowVariant::babyAssetId,
+            CowVariant::create);
 
-    @NotNull NetworkBuffer.Type<RegistryKey<CowVariant>> NETWORK_TYPE = RegistryKey.networkType(Registries::cowVariant);
-    @NotNull Codec<RegistryKey<CowVariant>> CODEC = RegistryKey.codec(Registries::cowVariant);
+    NetworkBuffer.Type<RegistryKey<CowVariant>> NETWORK_TYPE = RegistryKey.networkType(Registries::cowVariant);
+    Codec<RegistryKey<CowVariant>> CODEC = RegistryKey.codec(Registries::cowVariant);
 
-    static @NotNull CowVariant create(@NotNull Model model, @NotNull Key assetId) {
-        return new CowVariantImpl(model, assetId);
+    static CowVariant create(Model model, Key assetId, Key babyAssetId) {
+        return new CowVariantImpl(model, assetId, babyAssetId);
     }
 
     /**
@@ -31,12 +31,14 @@ public sealed interface CowVariant extends CowVariants permits CowVariantImpl {
      */
     @ApiStatus.Internal
     static DynamicRegistry<CowVariant> createDefaultRegistry() {
-        return DynamicRegistry.create(Key.key("cow_variant"), REGISTRY_CODEC, RegistryData.Resource.COW_VARIANTS);
+        return DynamicRegistry.create(BuiltinRegistries.COW_VARIANT, REGISTRY_CODEC);
     }
 
-    @NotNull Model model();
+    Model model();
 
-    @NotNull Key assetId();
+    Key assetId();
+
+    Key babyAssetId();
 
     enum Model {
         NORMAL,

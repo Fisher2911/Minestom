@@ -2,7 +2,6 @@ package net.minestom.server.entity.ai;
 
 import net.minestom.server.entity.Entity;
 import net.minestom.server.entity.EntityCreature;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.ref.WeakReference;
@@ -12,12 +11,12 @@ public abstract class GoalSelector {
     private WeakReference<EntityAIGroup> aiGroupWeakReference;
     protected EntityCreature entityCreature;
 
-    public GoalSelector(@NotNull EntityCreature entityCreature) {
+    public GoalSelector(EntityCreature entityCreature) {
         this.entityCreature = entityCreature;
     }
 
     /**
-     * Whether or not this {@link GoalSelector} should start.
+     * Whether this {@link GoalSelector} should start.
      *
      * @return true to start
      */
@@ -36,7 +35,7 @@ public abstract class GoalSelector {
     public abstract void tick(long time);
 
     /**
-     * Whether or not this {@link GoalSelector} should end.
+     * Whether this {@link GoalSelector} should end.
      *
      * @return true to end
      */
@@ -72,7 +71,6 @@ public abstract class GoalSelector {
      *
      * @return the entity
      */
-    @NotNull
     public EntityCreature getEntityCreature() {
         return entityCreature;
     }
@@ -86,11 +84,11 @@ public abstract class GoalSelector {
      *
      * @param entityCreature the new affected entity
      */
-    public void setEntityCreature(@NotNull EntityCreature entityCreature) {
+    public void setEntityCreature(EntityCreature entityCreature) {
         this.entityCreature = entityCreature;
     }
 
-    void setAIGroup(@NotNull EntityAIGroup group) {
+    void setAIGroup(EntityAIGroup group) {
         this.aiGroupWeakReference = new WeakReference<>(group);
     }
 

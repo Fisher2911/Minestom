@@ -7,16 +7,15 @@ import net.minestom.server.item.ItemAnimation;
 import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.network.NetworkBufferTemplate;
 import net.minestom.server.sound.SoundEvent;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
 public record Consumable(
         float consumeSeconds,
-        @NotNull ItemAnimation animation,
-        @NotNull SoundEvent sound,
+        ItemAnimation animation,
+        SoundEvent sound,
         boolean hasConsumeParticles,
-        @NotNull List<ConsumeEffect> effects
+        List<ConsumeEffect> effects
 ) {
     public static final float DEFAULT_CONSUME_SECONDS = 1.6f;
 
@@ -34,6 +33,10 @@ public record Consumable(
             "has_consume_particles", Codec.BOOLEAN.optional(true), Consumable::hasConsumeParticles,
             "on_consume_effects", ConsumeEffect.CODEC.list().optional(List.of()), Consumable::effects,
             Consumable::new);
+
+    public Consumable {
+        effects = List.copyOf(effects);
+    }
 
     public int consumeTicks() {
         return (int) (consumeSeconds * ServerFlag.SERVER_TICKS_PER_SECOND);

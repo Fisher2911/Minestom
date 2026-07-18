@@ -14,8 +14,6 @@ import net.minestom.server.instance.Instance;
 import net.minestom.server.network.ConnectionManager;
 import net.minestom.server.utils.MathUtils;
 import net.minestom.server.utils.Range;
-import net.minestom.server.utils.validate.Check;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -32,12 +30,12 @@ public class EntityFinder {
 
     private TargetSelector targetSelector;
 
-    private EntitySort entitySort = EntitySort.ARBITRARY;
+    private EntitySort entitySort;
 
     // Position
     private Point startPosition;
     private Float dx, dy, dz;
-    private Range.Int distance;
+    private Range.Double distance;
 
     // By traits
     private Integer limit;
@@ -52,22 +50,22 @@ public class EntityFinder {
     private final ToggleableMap<GameMode> gameModes = new ToggleableMap<>();
     private Range.Int level;
 
-    public EntityFinder setTargetSelector(@NotNull TargetSelector targetSelector) {
+    public EntityFinder setTargetSelector(TargetSelector targetSelector) {
         this.targetSelector = targetSelector;
         return this;
     }
 
-    public EntityFinder setEntitySort(@NotNull EntitySort entitySort) {
+    public EntityFinder setEntitySort(EntitySort entitySort) {
         this.entitySort = entitySort;
         return this;
     }
 
-    public EntityFinder setStartPosition(@NotNull Point startPosition) {
+    public EntityFinder setStartPosition(Point startPosition) {
         this.startPosition = startPosition;
         return this;
     }
 
-    public EntityFinder setDistance(@NotNull Range.Int distance) {
+    public EntityFinder setDistance(Range.Double distance) {
         this.distance = distance;
         return this;
     }
@@ -77,37 +75,37 @@ public class EntityFinder {
         return this;
     }
 
-    public EntityFinder setLevel(@NotNull Range.Int level) {
+    public EntityFinder setLevel(Range.Int level) {
         this.level = level;
         return this;
     }
 
-    public EntityFinder setEntity(@NotNull EntityType entityType, @NotNull ToggleableType toggleableType) {
+    public EntityFinder setEntity(EntityType entityType, ToggleableType toggleableType) {
         this.entityTypes.put(entityType, toggleableType.getValue());
         return this;
     }
 
-    public EntityFinder setConstantName(@NotNull String constantName) {
+    public EntityFinder setConstantName(String constantName) {
         this.constantName = constantName;
         return this;
     }
 
-    public EntityFinder setConstantUuid(@NotNull UUID constantUuid) {
+    public EntityFinder setConstantUuid(UUID constantUuid) {
         this.constantUuid = constantUuid;
         return this;
     }
 
-    public EntityFinder setName(@NotNull String name, @NotNull ToggleableType toggleableType) {
+    public EntityFinder setName(String name, ToggleableType toggleableType) {
         this.names.put(name, toggleableType.getValue());
         return this;
     }
 
-    public EntityFinder setUuid(@NotNull UUID uuid, @NotNull ToggleableType toggleableType) {
+    public EntityFinder setUuid(UUID uuid, ToggleableType toggleableType) {
         this.uuids.put(uuid, toggleableType.getValue());
         return this;
     }
 
-    public EntityFinder setGameMode(@NotNull GameMode gameMode, @NotNull ToggleableType toggleableType) {
+    public EntityFinder setGameMode(GameMode gameMode, ToggleableType toggleableType) {
         this.gameModes.put(gameMode, toggleableType.getValue());
         return this;
     }
@@ -127,31 +125,32 @@ public class EntityFinder {
      * @param self     the source of the query, null if not any
      * @return all entities validating the conditions, can be empty
      */
-    public @NotNull List<@NotNull Entity> find(@Nullable Instance instance, @Nullable Entity self) {
+    public List<Entity> find(@Nullable Instance instance, @Nullable Entity self) {
         if (targetSelector == TargetSelector.MINESTOM_USERNAME) {
-            Check.notNull(constantName, "The player name should not be null when searching for it");
+            Objects.requireNonNull(constantName, "The player name should not be null when searching for it");
             final Player player = MinecraftServer.getConnectionManager().getOnlinePlayerByUsername(constantName);
             return player != null ? List.of(player) : List.of();
         } else if (targetSelector == TargetSelector.MINESTOM_UUID) {
-            Check.notNull(constantUuid, "The UUID should not be null when searching for it");
-            Check.notNull(instance, "The instance should not be null when searching by UUID");
+            Objects.requireNonNull(constantUuid, "The UUID should not be null when searching for it");
+            Objects.requireNonNull(instance, "The instance should not be null when searching by UUID");
             final Entity entity = instance.getEntityByUuid(constantUuid);
             return entity != null ? List.of(entity) : List.of();
         }
 
         final Point pos = startPosition != null ? startPosition : (self != null ? self.getPosition() : Vec.ZERO);
 
-        List<Entity> result = findTarget(instance, targetSelector, pos, self);
+        List<Entity> result = findTarget(instance, targetSelector, self);
         // Fast exit if there is nothing to process
         if (result.isEmpty())
             return result;
 
         // Distance argument
         if (distance != null) {
-            final int minDistance = distance.min();
-            final int maxDistance = distance.max();
+            final double minDistanceSquared = MathUtils.square(Math.max(distance.min() == null ? 0.0 : distance.min(), 0));
+            final double maxDistanceSquared = MathUtils.square(distance.max() == null ? Double.MAX_VALUE : distance.max());
+
             result = result.stream()
-                    .filter(entity -> MathUtils.isBetween(entity.getPosition().distanceSquared(pos), minDistance * minDistance, maxDistance * maxDistance))
+                    .filter(entity -> MathUtils.isBetween(entity.getDistanceSquared(pos), minDistanceSquared, maxDistanceSquared))
                     .toList();
         }
 
@@ -195,8 +194,8 @@ public class EntityFinder {
 
         // Level
         if (level != null) {
-            final int minLevel = level.min();
-            final int maxLevel = level.max();
+            final int minLevel = level.min() == null ? 0 : level.min();
+            final int maxLevel = level.max() == null ? Integer.MAX_VALUE : level.max();
             result = result.stream()
                     .filter(Player.class::isInstance)
                     .filter(entity -> MathUtils.isBetween(((Player) entity).getLevel(), minLevel, maxLevel))
@@ -219,32 +218,55 @@ public class EntityFinder {
         }
 
 
-        // Sort & limit
-        if (entitySort != EntitySort.ARBITRARY || limit != null) {
-            result = result.stream()
-                    .sorted((ent1, ent2) -> switch (entitySort) {
-                        case ARBITRARY, RANDOM ->
-                            // RANDOM is handled below
-                                1;
-                        case FURTHEST -> pos.distanceSquared(ent1.getPosition()) >
-                                pos.distanceSquared(ent2.getPosition()) ?
-                                1 : 0;
-                        case NEAREST -> pos.distanceSquared(ent1.getPosition()) <
-                                pos.distanceSquared(ent2.getPosition()) ?
-                                1 : 0;
-                    })
-                    .limit(limit != null ? limit : Integer.MAX_VALUE)
-                    .toList();
+        // @p/@r/@n are shorthands for a default sort and limit, both overridable
+        EntitySort effectiveSort = entitySort;
+        Integer effectiveLimit = limit;
 
-            if (entitySort == EntitySort.RANDOM) {
-                Collections.shuffle(result);
+        if (targetSelector == TargetSelector.NEAREST_PLAYER || targetSelector == TargetSelector.NEAREST_ENTITY) {
+            if (effectiveSort == null) effectiveSort = EntitySort.NEAREST;
+            if (effectiveLimit == null) effectiveLimit = 1;
+        } else if (targetSelector == TargetSelector.RANDOM_PLAYER) {
+            if (effectiveSort == null) effectiveSort = EntitySort.RANDOM;
+            if (effectiveLimit == null) effectiveLimit = 1;
+        }
+
+        if (effectiveSort == null) {
+            effectiveSort = EntitySort.ARBITRARY;
+        }
+
+        // Sort & limit
+        final Comparator<Entity> nearestFirst = Comparator.comparingDouble(entity -> entity.getDistanceSquared(pos));
+
+        if (effectiveLimit != null && effectiveLimit == 1) {
+            result = switch (effectiveSort) {
+                case ARBITRARY -> List.copyOf(result.subList(0, Math.min(1, result.size())));
+                case RANDOM -> result.isEmpty() ? List.of()
+                        : List.of(result.get(ThreadLocalRandom.current().nextInt(result.size())));
+                case NEAREST -> result.stream().min(nearestFirst).map(List::<Entity>of).orElse(List.of());
+                case FURTHEST -> result.stream().max(nearestFirst).map(List::<Entity>of).orElse(List.of());
+            };
+        } else if (effectiveSort == EntitySort.ARBITRARY) {
+            if (effectiveLimit != null && result.size() > effectiveLimit) {
+                result = List.copyOf(result.subList(0, effectiveLimit));
             }
+        } else {
+            final List<Entity> sorted = new ArrayList<>(result);
+
+            if (effectiveSort == EntitySort.RANDOM) {
+                Collections.shuffle(sorted);
+            } else {
+                sorted.sort(effectiveSort == EntitySort.NEAREST ? nearestFirst : nearestFirst.reversed());
+            }
+
+            result = effectiveLimit != null && sorted.size() > effectiveLimit
+                    ? List.copyOf(sorted.subList(0, effectiveLimit))
+                    : sorted;
         }
 
         return result;
     }
 
-    public @NotNull List<@NotNull Entity> find(@NotNull CommandSender sender) {
+    public List<Entity> find(CommandSender sender) {
         return sender instanceof Player player ?
                 find(player.getInstance(), player) : find(null, null);
     }
@@ -266,7 +288,7 @@ public class EntityFinder {
         return null;
     }
 
-    public @Nullable Player findFirstPlayer(@NotNull CommandSender sender) {
+    public @Nullable Player findFirstPlayer(CommandSender sender) {
         return sender instanceof Player player ?
                 findFirstPlayer(player.getInstance(), player) :
                 findFirstPlayer(null, null);
@@ -274,10 +296,10 @@ public class EntityFinder {
 
     public @Nullable Entity findFirstEntity(@Nullable Instance instance, @Nullable Entity self) {
         final List<Entity> entities = find(instance, self);
-        return entities.isEmpty() ? null : entities.get(0);
+        return entities.isEmpty() ? null : entities.getFirst();
     }
 
-    public @Nullable Entity findFirstEntity(@NotNull CommandSender sender) {
+    public @Nullable Entity findFirstEntity(CommandSender sender) {
         return sender instanceof Player player ?
                 findFirstEntity(player.getInstance(), player) : findFirstEntity(null, null);
     }
@@ -307,27 +329,13 @@ public class EntityFinder {
     private static class ToggleableMap<T> extends Object2BooleanOpenHashMap<T> {
     }
 
-    private static @NotNull List<@NotNull Entity> findTarget(@Nullable Instance instance,
-                                                             @NotNull TargetSelector targetSelector,
-                                                             @NotNull Point startPosition, @Nullable Entity self) {
+    private static List<Entity> findTarget(@Nullable Instance instance,
+                                           TargetSelector targetSelector,
+                                           @Nullable Entity self) {
         final var players = instance != null ? instance.getPlayers() : CONNECTION_MANAGER.getOnlinePlayers();
-        if (targetSelector == TargetSelector.NEAREST_PLAYER) {
-            return players.stream()
-                    .min(Comparator.comparingDouble(p -> p.getPosition().distanceSquared(startPosition)))
-                    .<List<Entity>>map(Collections::singletonList).orElse(List.of());
-        } else if (targetSelector == TargetSelector.NEAREST_ENTITY) {
-            List<Entity> entities = findTarget(instance, TargetSelector.ALL_ENTITIES, startPosition, self);
-
-            return entities.stream()
-                    .min(Comparator.comparingDouble(p -> p.getPosition().distanceSquared(startPosition)))
-                    .map(Collections::singletonList).orElse(List.of());
-        } else if (targetSelector == TargetSelector.RANDOM_PLAYER) {
-            final int index = ThreadLocalRandom.current().nextInt(players.size());
-            final Player player = players.stream().skip(index).findFirst().orElseThrow();
-            return List.of(player);
-        } else if (targetSelector == TargetSelector.ALL_PLAYERS) {
+        if (targetSelector == TargetSelector.NEAREST_PLAYER || targetSelector == TargetSelector.RANDOM_PLAYER || targetSelector == TargetSelector.ALL_PLAYERS) {
             return List.copyOf(players);
-        } else if (targetSelector == TargetSelector.ALL_ENTITIES) {
+        } else if (targetSelector == TargetSelector.NEAREST_ENTITY || targetSelector == TargetSelector.ALL_ENTITIES) {
             if (instance != null) {
                 return List.copyOf(instance.getEntities());
             }
@@ -344,7 +352,7 @@ public class EntityFinder {
         throw new IllegalStateException("Weird thing happened: " + targetSelector);
     }
 
-    private static <T> boolean filterToggleableMap(@NotNull T value, @NotNull ToggleableMap<T> map) {
+    private static <T> boolean filterToggleableMap(T value, ToggleableMap<T> map) {
         for (var entry : Object2BooleanMaps.fastIterable(map)) {
             if (entry.getBooleanValue() != Objects.equals(value, entry.getKey())) {
                 return false;

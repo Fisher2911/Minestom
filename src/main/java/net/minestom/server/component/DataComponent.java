@@ -1,15 +1,18 @@
 package net.minestom.server.component;
 
 import net.kyori.adventure.key.Key;
+import net.kyori.adventure.key.KeyPattern;
 import net.minestom.server.codec.Codec;
+import net.minestom.server.codec.Decoder;
+import net.minestom.server.codec.Encoder;
 import net.minestom.server.item.enchant.EffectComponent;
 import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.registry.StaticProtocolObject;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
+import java.util.function.UnaryOperator;
 
 /**
  * A common type to represent all forms of component in the game. Each group of component types has its own declaration
@@ -19,17 +22,17 @@ import java.util.Collection;
  * @see net.minestom.server.component.DataComponent
  * @see EffectComponent
  */
-public sealed interface DataComponent<T> extends StaticProtocolObject<DataComponent<T>>, Codec<T> permits DataComponentImpl {
+public sealed interface DataComponent<T> extends StaticProtocolObject<DataComponent<T>>, Encoder<T>, Decoder<T> permits DataComponentImpl {
 
-    @NotNull NetworkBuffer.Type<DataComponent<?>> NETWORK_TYPE = NetworkBuffer.VAR_INT.transform(DataComponent::fromId, DataComponent::id);
-    @NotNull Codec<DataComponent<?>> CODEC = Codec.STRING.transform(DataComponent::fromKey, DataComponent::name);
+    NetworkBuffer.Type<DataComponent<?>> NETWORK_TYPE = NetworkBuffer.VAR_INT.transform(DataComponent::fromId, DataComponent::id);
+    Codec<DataComponent<?>> CODEC = Codec.KEY.transform(DataComponent::fromKey, DataComponent::key);
 
-    @NotNull NetworkBuffer.Type<DataComponentMap> MAP_NETWORK_TYPE = DataComponentMap.networkType(DataComponent::fromId);
-    @NotNull Codec<DataComponentMap> MAP_NBT_TYPE = DataComponentMap.codec(DataComponent::fromId, DataComponent::fromKey);
+    NetworkBuffer.Type<DataComponentMap> MAP_NETWORK_TYPE = DataComponentMap.networkType(DataComponent::fromId);
+    Codec<DataComponentMap> MAP_NBT_TYPE = DataComponentMap.codec(DataComponent::fromId, DataComponent::fromKey);
 
-    @NotNull NetworkBuffer.Type<DataComponentMap> PATCH_NETWORK_TYPE = DataComponentMap.patchNetworkType(DataComponent::fromId, true);
-    @NotNull NetworkBuffer.Type<DataComponentMap> UNTRUSTED_PATCH_NETWORK_TYPE = DataComponentMap.patchNetworkType(DataComponent::fromId, false);
-    @NotNull Codec<DataComponentMap> PATCH_CODEC = DataComponentMap.patchCodec(DataComponent::fromId, DataComponent::fromKey);
+    NetworkBuffer.Type<DataComponentMap> PATCH_NETWORK_TYPE = DataComponentMap.patchNetworkType(DataComponent::fromId, true);
+    NetworkBuffer.Type<DataComponentMap> UNTRUSTED_PATCH_NETWORK_TYPE = DataComponentMap.patchNetworkType(DataComponent::fromId, false);
+    Codec<DataComponentMap> PATCH_CODEC = DataComponentMap.patchCodec(DataComponent::fromId, DataComponent::fromKey);
 
     /**
      * Represents any type which can hold data components. Represents a finalized view of a component, that is to say
@@ -37,49 +40,62 @@ public sealed interface DataComponent<T> extends StaticProtocolObject<DataCompon
      * will always represent the merged view.
      */
     interface Holder {
-        default boolean has(@NotNull DataComponent<?> component) {
+        default boolean has(DataComponent<?> component) {
             return get(component) != null;
         }
 
-        <T> @Nullable T get(@NotNull DataComponent<T> component);
+        <T> @Nullable T get(DataComponent<T> component);
 
-        default <T> @NotNull T get(@NotNull DataComponent<T> component, @NotNull T defaultValue) {
+        default <T> T get(DataComponent<T> component, T defaultValue) {
             final T value = get(component);
             return value != null ? value : defaultValue;
         }
     }
 
-    record Value(@NotNull DataComponent<?> component, @Nullable Object value) {
+    record Value(DataComponent<?> component, @Nullable Object value) {
     }
 
     boolean isSynced();
     boolean isSerialized();
+    @Nullable NetworkBuffer.Type<T> networkType();
+    @Nullable Codec<T> codec();
 
-    @NotNull T read(@NotNull NetworkBuffer reader);
-    void write(@NotNull NetworkBuffer writer, @NotNull T value);
+    T read(NetworkBuffer reader);
+    void write(NetworkBuffer writer, T value);
 
-    static @Nullable DataComponent<?> fromKey(@NotNull String key) {
-        return DataComponentImpl.NAMESPACES.get(key);
+    /**
+     * Freezes the given value if possible. For example, collections should be frozen.
+     * <br>
+     * Note: Only {@link T} itself is required to be frozen, the objects inside {@link T} should be immutable.
+     *
+     * @param value the value to freeze
+     * @return the frozen value, or the original value if it could not be frozen
+     */
+    T freeze(T value);
+
+    static @Nullable DataComponent<?> fromKey(@KeyPattern String key) {
+        return fromKey(Key.key(key));
     }
 
-    static @Nullable DataComponent<?> fromKey(@NotNull Key key) {
-        return fromKey(key.asString());
+    static @Nullable DataComponent<?> fromKey(Key key) {
+        return DataComponentImpl.NAMESPACES.get(key);
     }
 
     static @Nullable DataComponent<?> fromId(int id) {
         return DataComponentImpl.IDS.get(id);
     }
 
-    static @NotNull Collection<DataComponent<?>> values() {
+    static Collection<DataComponent<?>> values() {
         return DataComponentImpl.NAMESPACES.values();
     }
 
     @ApiStatus.Internal
     static <T> DataComponent<T> createHeadless(
-            int id, @NotNull Key key,
+            int id, Key key,
             @Nullable NetworkBuffer.Type<T> network,
-            @Nullable Codec<T> codec
+            @Nullable Codec<T> codec,
+            @Nullable UnaryOperator<T> freeze
     ) {
-        return new DataComponentImpl<>(id, key, network, codec);
+        return new DataComponentImpl<>(id, key, network, codec, freeze);
     }
 }

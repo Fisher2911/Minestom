@@ -11,6 +11,7 @@ import net.minestom.demo.block.placement.BedPlacementRule;
 import net.minestom.demo.block.placement.DripstonePlacementRule;
 import net.minestom.demo.commands.*;
 import net.minestom.demo.recipe.ShapelessRecipe;
+import net.minestom.server.Auth;
 import net.minestom.server.MinecraftServer;
 import net.minestom.server.command.CommandManager;
 import net.minestom.server.component.DataComponents;
@@ -18,6 +19,7 @@ import net.minestom.server.event.server.ServerListPingEvent;
 import net.minestom.server.extras.lan.OpenToLAN;
 import net.minestom.server.extras.lan.OpenToLANConfig;
 import net.minestom.server.instance.block.Block;
+import net.minestom.server.instance.block.BlockEntityType;
 import net.minestom.server.instance.block.BlockManager;
 import net.minestom.server.item.ItemStack;
 import net.minestom.server.item.Material;
@@ -28,25 +30,24 @@ import net.minestom.server.registry.RegistryTag;
 import net.minestom.server.registry.TagKey;
 import net.minestom.server.utils.time.TimeUnit;
 
-import javax.imageio.ImageIO;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
 public class Main {
 
-    public static void main(String[] args) {
+    static void main(String[] args) {
         System.setProperty("minestom.new-socket-write-lock", "true");
+        System.setProperty("minestom.registry.unsafe-ops", "true");
         MinecraftServer.setCompressionThreshold(0);
 
-        MinecraftServer minecraftServer = MinecraftServer.init();
+        MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Offline());
 
         BlockManager blockManager = MinecraftServer.getBlockManager();
         blockManager.registerBlockPlacementRule(new DripstonePlacementRule());
-        var beds = Block.values().stream().filter(block -> block.registry().blockEntityId() == 25).toList();
+        var beds = Block.values().stream().filter(block -> block.key().value().contains("bed")).toList();
         beds.forEach(block -> blockManager.registerBlockPlacementRule(new BedPlacementRule(block)));
         blockManager.registerHandler(TestBlockHandler.INSTANCE.getKey(), () -> TestBlockHandler.INSTANCE);
 
@@ -87,14 +88,16 @@ public class Main {
         commandManager.register(new PotionCommand());
         commandManager.register(new CookieCommand());
         commandManager.register(new WorldBorderCommand());
+        commandManager.register(new TransferCommand());
         commandManager.register(new TestInstabreakCommand());
         commandManager.register(new AttributeCommand());
         commandManager.register(new PrimedTNTCommand());
         commandManager.register(new SleepCommand());
+        commandManager.register(new MinecartCommand());
+        commandManager.register(new BelowNameCommand());
+        commandManager.register(new TestBiomeAmbientParticleCommand());
 
         commandManager.setUnknownCommandCallback((sender, command) -> sender.sendMessage(Component.text("Unknown command", NamedTextColor.RED)));
-
-        MinecraftServer.getBenchmarkManager().enable(Duration.of(10, TimeUnit.SECOND));
 
         MinecraftServer.getSchedulerManager().buildShutdownTask(() -> System.out.println("Good night"));
 
@@ -122,7 +125,7 @@ public class Main {
             if (event.getConnection() != null) {
                 String ip = event.getConnection().getServerAddress();
                 builder = builder
-                        .sample("IP test: " + event.getConnection().getRemoteAddress().toString())
+                        .sample("IP test: " + event.getConnection().getRemoteAddress())
                         .sample("Connection Info:")
                         .sample(Component.text('-', NamedTextColor.DARK_GRAY)
                                 .append(Component.text(" IP: ", NamedTextColor.GRAY))

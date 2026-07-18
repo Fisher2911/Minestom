@@ -4,8 +4,8 @@ import net.minestom.server.coordinate.BlockVec;
 import net.minestom.server.entity.Player;
 import net.minestom.server.event.trait.BlockEvent;
 import net.minestom.server.event.trait.PlayerInstanceEvent;
+import net.minestom.server.instance.Instance;
 import net.minestom.server.instance.block.Block;
-import org.jetbrains.annotations.NotNull;
 
 /**
  * Called when a player tries to pick a block (middle-click).
@@ -14,17 +14,23 @@ public class PlayerPickBlockEvent implements PlayerInstanceEvent, BlockEvent {
 
     private final Player player;
 
+    private final Instance instance;
     private final Block block;
     private final BlockVec blockPosition;
     private final boolean includeData;
 
-    public PlayerPickBlockEvent(@NotNull Player player, @NotNull Block block,
-                                @NotNull BlockVec blockPosition, boolean includeData) {
+    public PlayerPickBlockEvent(Player player, Instance instance, Block block,
+                                BlockVec blockPosition, boolean includeData) {
         this.player = player;
-
+        this.instance = instance;
         this.block = block;
         this.blockPosition = blockPosition;
         this.includeData = includeData;
+    }
+
+    @Override
+    public Instance getInstance() {
+        return instance;
     }
 
     /**
@@ -33,7 +39,7 @@ public class PlayerPickBlockEvent implements PlayerInstanceEvent, BlockEvent {
      * @return the block which was picked
      */
     @Override
-    public @NotNull Block getBlock() {
+    public Block getBlock() {
         return block;
     }
 
@@ -43,7 +49,7 @@ public class PlayerPickBlockEvent implements PlayerInstanceEvent, BlockEvent {
      * @return the picked block position
      */
     @Override
-    public @NotNull BlockVec getBlockPosition() {
+    public BlockVec getBlockPosition() {
         return blockPosition;
     }
 
@@ -57,7 +63,7 @@ public class PlayerPickBlockEvent implements PlayerInstanceEvent, BlockEvent {
     }
 
     @Override
-    public @NotNull Player getPlayer() {
+    public Player getPlayer() {
         return player;
     }
 }

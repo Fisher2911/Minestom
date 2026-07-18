@@ -1,8 +1,5 @@
 package net.minestom.server.coordinate;
 
-import org.jetbrains.annotations.NotNullByDefault;
-
-@NotNullByDefault
 public final class CoordConversion {
     public static final int REGION_SIZE = 512;
     public static final int SECTION_SIZE = 16;
@@ -223,6 +220,10 @@ public final class CoordConversion {
 
     public static long encodeSectionBlockChange(int localX, int localY, int localZ, long value) {
         return encodeSectionBlockChange(sectionBlockIndex(localX, localY, localZ), value);
+    }
+
+    public static short deltaShort4096(double newCoordinate, double oldCoordinate) {
+        return (short) ((newCoordinate - oldCoordinate) * 4096);
     }
 
     // HASHING

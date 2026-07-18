@@ -1,23 +1,13 @@
 package net.minestom.server.entity.metadata.water;
 
-import net.minestom.server.coordinate.Point;
 import net.minestom.server.entity.Entity;
 import net.minestom.server.entity.MetadataDef;
 import net.minestom.server.entity.MetadataHolder;
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class DolphinMeta extends AgeableWaterAnimalMeta {
-    public DolphinMeta(@NotNull Entity entity, @NotNull MetadataHolder metadata) {
+    public DolphinMeta(@Nullable Entity entity, MetadataHolder metadata) {
         super(entity, metadata);
-    }
-
-    @NotNull
-    public Point getTreasurePosition() {
-        return metadata.get(MetadataDef.Dolphin.TREASURE_POSITION);
-    }
-
-    public void setTreasurePosition(@NotNull Point value) {
-        metadata.set(MetadataDef.Dolphin.TREASURE_POSITION, value);
     }
 
     public boolean isHasFish() {

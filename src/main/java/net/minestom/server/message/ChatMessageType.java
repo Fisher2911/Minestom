@@ -1,7 +1,5 @@
 package net.minestom.server.message;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.util.EnumSet;
 
 /**
@@ -25,7 +23,7 @@ public enum ChatMessageType {
 
     private final EnumSet<ChatPosition> acceptedPositions;
 
-    ChatMessageType(@NotNull EnumSet<ChatPosition> acceptedPositions) {
+    ChatMessageType(EnumSet<ChatPosition> acceptedPositions) {
         this.acceptedPositions = acceptedPositions;
     }
 
@@ -35,31 +33,7 @@ public enum ChatMessageType {
      * @param chatPosition the position
      * @return if the message is accepted
      */
-    public boolean accepts(@NotNull ChatPosition chatPosition) {
+    public boolean accepts(ChatPosition chatPosition) {
         return this.acceptedPositions.contains(chatPosition);
-    }
-
-    /**
-     * Gets the packet ID for this chat message type.
-     *
-     * @return the packet ID
-     */
-    public int getPacketID() {
-        return this.ordinal();
-    }
-
-    /**
-     * Gets a chat message type from a packet ID.
-     *
-     * @param id the packet ID
-     * @return the chat message type
-     */
-    public static @NotNull ChatMessageType fromPacketID(int id) {
-        return switch (id) {
-            case 0 -> FULL;
-            case 1 -> SYSTEM;
-            case 2 -> NONE;
-            default -> throw new IllegalArgumentException("id must be between 0-2 (inclusive)");
-        };
     }
 }

@@ -1,18 +1,17 @@
 package net.minestom.server.entity.damage;
 
-import net.kyori.adventure.key.Key;
 import net.minestom.server.codec.Codec;
 import net.minestom.server.codec.StructCodec;
+import net.minestom.server.network.NetworkBuffer;
+import net.minestom.server.registry.BuiltinRegistries;
 import net.minestom.server.registry.DynamicRegistry;
 import net.minestom.server.registry.Registries;
-import net.minestom.server.registry.RegistryData;
 import net.minestom.server.registry.RegistryKey;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public sealed interface DamageType extends DamageTypes permits DamageTypeImpl {
-    @NotNull Codec<DamageType> REGISTRY_CODEC = StructCodec.struct(
+    Codec<DamageType> REGISTRY_CODEC = StructCodec.struct(
             "message_id", Codec.STRING, DamageType::messageId,
             "scaling", Codec.STRING, DamageType::scaling,
             "exhaustion", Codec.FLOAT, DamageType::exhaustion,
@@ -20,11 +19,12 @@ public sealed interface DamageType extends DamageTypes permits DamageTypeImpl {
             "death_message_type", Codec.STRING.optional("default"), DamageType::deathMessageType,
             DamageType::create);
 
-    @NotNull Codec<RegistryKey<DamageType>> CODEC = RegistryKey.codec(Registries::damageType);
+    NetworkBuffer.Type<RegistryKey<DamageType>> NETWORK_TYPE = RegistryKey.networkType(Registries::damageType);
+    Codec<RegistryKey<DamageType>> CODEC = RegistryKey.codec(Registries::damageType);
 
-    static @NotNull DamageType create(
-            @NotNull String messageId,
-            @NotNull String scaling,
+    static DamageType create(
+            String messageId,
+            String scaling,
             float exhaustion,
             @Nullable String effects,
             @Nullable String deathMessageType
@@ -32,7 +32,7 @@ public sealed interface DamageType extends DamageTypes permits DamageTypeImpl {
         return new DamageTypeImpl(messageId, scaling, exhaustion, effects, deathMessageType);
     }
 
-    static @NotNull Builder builder() {
+    static Builder builder() {
         return new Builder();
     }
 
@@ -42,13 +42,13 @@ public sealed interface DamageType extends DamageTypes permits DamageTypeImpl {
      * @see net.minestom.server.MinecraftServer to get an existing instance of the registry
      */
     @ApiStatus.Internal
-    static @NotNull DynamicRegistry<DamageType> createDefaultRegistry() {
-        return DynamicRegistry.create(Key.key("damage_type"), REGISTRY_CODEC, RegistryData.Resource.DAMAGE_TYPES);
+    static DynamicRegistry<DamageType> createDefaultRegistry() {
+        return DynamicRegistry.create(BuiltinRegistries.DAMAGE_TYPE, REGISTRY_CODEC);
     }
 
-    @NotNull String messageId();
+    String messageId();
 
-    @NotNull String scaling();
+    String scaling();
 
     float exhaustion();
 
@@ -60,40 +60,39 @@ public sealed interface DamageType extends DamageTypes permits DamageTypeImpl {
         private String messageId;
         private String scaling;
         private float exhaustion = 0f;
-        private String effects;
-        private String deathMessageType;
+        private @Nullable String effects;
+        private @Nullable String deathMessageType;
 
         private Builder() {
         }
 
-        public @NotNull Builder messageId(@NotNull String messageId) {
+        public Builder messageId(String messageId) {
             this.messageId = messageId;
             return this;
         }
 
-        public @NotNull Builder scaling(@NotNull String scaling) {
+        public Builder scaling(String scaling) {
             this.scaling = scaling;
             return this;
         }
 
-        public @NotNull Builder exhaustion(float exhaustion) {
+        public Builder exhaustion(float exhaustion) {
             this.exhaustion = exhaustion;
             return this;
         }
 
-        public @NotNull Builder effects(@Nullable String effects) {
+        public Builder effects(@Nullable String effects) {
             this.effects = effects;
             return this;
         }
 
-        public @NotNull Builder deathMessageType(@Nullable String deathMessageType) {
+        public Builder deathMessageType(@Nullable String deathMessageType) {
             this.deathMessageType = deathMessageType;
             return this;
         }
 
-        public @NotNull DamageType build() {
+        public DamageType build() {
             return new DamageTypeImpl(messageId, scaling, exhaustion, effects, deathMessageType);
         }
     }
-
 }

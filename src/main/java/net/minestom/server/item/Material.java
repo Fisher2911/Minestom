@@ -2,6 +2,7 @@ package net.minestom.server.item;
 
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.key.KeyPattern;
+import net.kyori.adventure.translation.Translatable;
 import net.minestom.server.codec.Codec;
 import net.minestom.server.component.DataComponentMap;
 import net.minestom.server.component.DataComponents;
@@ -11,13 +12,12 @@ import net.minestom.server.registry.Registry;
 import net.minestom.server.registry.RegistryData;
 import net.minestom.server.registry.StaticProtocolObject;
 import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnknownNullability;
 
 import java.util.Collection;
 
-public sealed interface Material extends StaticProtocolObject<Material>, Materials permits MaterialImpl {
+public sealed interface Material extends StaticProtocolObject<Material>, Materials, Translatable permits MaterialImpl {
 
     NetworkBuffer.Type<Material> NETWORK_TYPE = NetworkBuffer.VAR_INT.transform(Material::fromId, Material::id);
     Codec<Material> CODEC = Codec.KEY.transform(Material::fromKey, Material::key);
@@ -26,10 +26,10 @@ public sealed interface Material extends StaticProtocolObject<Material>, Materia
      * Returns the raw registry data for the material.
      */
     @Contract(pure = true)
-    @NotNull RegistryData.MaterialEntry registry();
+    RegistryData.MaterialEntry registry();
 
     @Override
-    default @NotNull Key key() {
+    default Key key() {
         return registry().key();
     }
 
@@ -46,7 +46,7 @@ public sealed interface Material extends StaticProtocolObject<Material>, Materia
         return registry().block();
     }
 
-    default @NotNull DataComponentMap prototype() {
+    default DataComponentMap prototype() {
         return registry().prototype();
     }
 
@@ -54,19 +54,24 @@ public sealed interface Material extends StaticProtocolObject<Material>, Materia
         return registry().isArmor();
     }
 
+    @Override
+    default String translationKey() {
+        return registry().translationKey();
+    }
+
     default int maxStackSize() {
         return prototype().get(DataComponents.MAX_STACK_SIZE, 64);
     }
 
-    static @NotNull Collection<@NotNull Material> values() {
+    static Collection<Material> values() {
         return MaterialImpl.REGISTRY.values();
     }
 
-    static @Nullable Material fromKey(@KeyPattern @NotNull String key) {
+    static @Nullable Material fromKey(@KeyPattern String key) {
         return fromKey(Key.key(key));
     }
 
-    static @Nullable Material fromKey(@NotNull Key key) {
+    static @Nullable Material fromKey(Key key) {
         return MaterialImpl.REGISTRY.get(key);
     }
 
@@ -74,7 +79,7 @@ public sealed interface Material extends StaticProtocolObject<Material>, Materia
         return MaterialImpl.REGISTRY.get(id);
     }
 
-    static @NotNull Registry<Material> staticRegistry() {
+    static Registry<Material> staticRegistry() {
         return MaterialImpl.REGISTRY;
     }
 }

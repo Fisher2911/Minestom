@@ -1,18 +1,16 @@
 package net.minestom.server.event.player;
 
 import net.minestom.server.coordinate.BlockVec;
-import net.minestom.server.coordinate.Point;
 import net.minestom.server.entity.Player;
-import net.minestom.server.event.trait.BlockEvent;
-import net.minestom.server.event.trait.CancellableEvent;
-import net.minestom.server.event.trait.PlayerInstanceEvent;
+import net.minestom.server.event.trait.*;
+import net.minestom.server.instance.Instance;
 import net.minestom.server.instance.block.Block;
 import net.minestom.server.instance.block.BlockFace;
-import org.jetbrains.annotations.NotNull;
 
 public class PlayerBlockBreakEvent implements PlayerInstanceEvent, BlockEvent, CancellableEvent {
 
     private final Player player;
+    private final Instance instance;
     private final Block block;
     private Block resultBlock;
     private final BlockVec blockPosition;
@@ -20,15 +18,20 @@ public class PlayerBlockBreakEvent implements PlayerInstanceEvent, BlockEvent, C
 
     private boolean cancelled;
 
-    public PlayerBlockBreakEvent(@NotNull Player player,
-                                 @NotNull Block block, @NotNull Block resultBlock, @NotNull BlockVec blockPosition,
-                                 @NotNull BlockFace blockFace) {
+    public PlayerBlockBreakEvent(Player player, Instance instance,
+                                 Block block, Block resultBlock, BlockVec blockPosition,
+                                 BlockFace blockFace) {
         this.player = player;
-
+        this.instance = instance;
         this.block = block;
         this.resultBlock = resultBlock;
         this.blockPosition = blockPosition;
         this.blockFace = blockFace;
+    }
+
+    @Override
+    public Instance getInstance() {
+        return instance;
     }
 
     /**
@@ -37,7 +40,7 @@ public class PlayerBlockBreakEvent implements PlayerInstanceEvent, BlockEvent, C
      * @return the block
      */
     @Override
-    public @NotNull Block getBlock() {
+    public Block getBlock() {
         return block;
     }
 
@@ -46,7 +49,7 @@ public class PlayerBlockBreakEvent implements PlayerInstanceEvent, BlockEvent, C
      *
      * @return the result block
      */
-    public @NotNull Block getResultBlock() {
+    public Block getResultBlock() {
         return resultBlock;
     }
 
@@ -55,7 +58,7 @@ public class PlayerBlockBreakEvent implements PlayerInstanceEvent, BlockEvent, C
      *
      * @return the block face
      */
-    public @NotNull BlockFace getBlockFace() {
+    public BlockFace getBlockFace() {
         return blockFace;
     }
 
@@ -64,7 +67,7 @@ public class PlayerBlockBreakEvent implements PlayerInstanceEvent, BlockEvent, C
      *
      * @param resultBlock the new block
      */
-    public void setResultBlock(@NotNull Block resultBlock) {
+    public void setResultBlock(Block resultBlock) {
         this.resultBlock = resultBlock;
     }
 
@@ -74,7 +77,7 @@ public class PlayerBlockBreakEvent implements PlayerInstanceEvent, BlockEvent, C
      * @return the block position
      */
     @Override
-    public @NotNull BlockVec getBlockPosition() {
+    public BlockVec getBlockPosition() {
         return blockPosition;
     }
 
@@ -89,7 +92,7 @@ public class PlayerBlockBreakEvent implements PlayerInstanceEvent, BlockEvent, C
     }
 
     @Override
-    public @NotNull Player getPlayer() {
+    public Player getPlayer() {
         return player;
     }
 }

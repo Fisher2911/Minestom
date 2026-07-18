@@ -1,12 +1,8 @@
 plugins {
     `java-library`
-
-    `maven-publish`
-    signing
-    alias(libs.plugins.nmcp)
 }
 
-val javaVersion = System.getenv("JAVA_VERSION") ?: "21"
+val javaVersion = System.getenv("JAVA_VERSION") ?: "25"
 
 group = "net.minestom"
 version = System.getenv("MINESTOM_VERSION") ?: "dev"
@@ -16,7 +12,15 @@ configurations.all {
     exclude("org.checkerframework", "checker-qual")
 }
 
+val adventureVersion = libs.adventure.api.get().version ?: ""
+
 repositories {
+    val dataVersion = libs.minestomData.get().version ?: ""
+    if (dataVersion.endsWith("-dev"))
+        mavenLocal()
+    if (adventureVersion.endsWith("-SNAPSHOT"))
+        maven(url = "https://central.sonatype.com/repository/maven-snapshots/")
+
     mavenCentral()
 }
 
@@ -30,6 +34,7 @@ dependencies {
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(javaVersion)
+    modularity.inferModulePath = true
 
     withSourcesJar()
     withJavadocJar()
@@ -47,8 +52,14 @@ tasks.withType<Javadoc> {
         addBooleanOption("html5", true)
         addStringOption("-release", javaVersion)
         // Links to external javadocs
-        links("https://docs.oracle.com/en/java/javase/${javaVersion}/docs/api/")
-        links("https://javadoc.io/doc/net.kyori/adventure-api/${libs.versions.adventure.get()}/")
+        links("https://docs.oracle.com/en/java/javase/$javaVersion/docs/api/")
+        if (!adventureVersion.endsWith("-SNAPSHOT")) {
+            links("https://jd.papermc.io/adventure/${libs.versions.adventure.get()}/")
+        }
+        links("https://javadoc.io/doc/com.google.code.gson/gson/${libs.versions.gson.get()}/")
+        links("https://javadoc.io/doc/org.jetbrains/annotations/${libs.versions.jetbrainsAnnotations.get()}/")
+
+        tags("apiNote:a:API Note:", "implSpec:a:Implementation Requirements:", "implNote:a:Implementation Note:")
     }
 }
 

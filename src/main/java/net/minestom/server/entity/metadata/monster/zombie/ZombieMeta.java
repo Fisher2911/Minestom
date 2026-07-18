@@ -5,10 +5,10 @@ import net.minestom.server.entity.Entity;
 import net.minestom.server.entity.MetadataDef;
 import net.minestom.server.entity.MetadataHolder;
 import net.minestom.server.entity.metadata.monster.MonsterMeta;
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class ZombieMeta extends MonsterMeta {
-    public ZombieMeta(@NotNull Entity entity, @NotNull MetadataHolder metadata) {
+    public ZombieMeta(@Nullable Entity entity, MetadataHolder metadata) {
         super(entity, metadata);
     }
 
@@ -33,6 +33,14 @@ public class ZombieMeta extends MonsterMeta {
         metadata.set(MetadataDef.Zombie.IS_BABY, value);
     }
 
+    public int getSpecialType() {
+        return metadata.get(MetadataDef.Zombie.SPECIAL_TYPE);
+    }
+
+    public void setSpecialType(int value) {
+        metadata.set(MetadataDef.Zombie.SPECIAL_TYPE, value);
+    }
+
     public boolean isBecomingDrowned() {
         return metadata.get(MetadataDef.Zombie.IS_BECOMING_DROWNED);
     }
@@ -40,5 +48,4 @@ public class ZombieMeta extends MonsterMeta {
     public void setBecomingDrowned(boolean value) {
         metadata.set(MetadataDef.Zombie.IS_BECOMING_DROWNED, value);
     }
-
 }

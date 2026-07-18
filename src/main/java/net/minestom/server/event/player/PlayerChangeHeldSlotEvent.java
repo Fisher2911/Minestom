@@ -6,7 +6,6 @@ import net.minestom.server.event.trait.PlayerInstanceEvent;
 import net.minestom.server.item.ItemStack;
 import net.minestom.server.utils.MathUtils;
 import net.minestom.server.utils.validate.Check;
-import org.jetbrains.annotations.NotNull;
 
 /**
  * Called when a player change his held slot (by pressing 1-9 keys).
@@ -19,20 +18,10 @@ public class PlayerChangeHeldSlotEvent implements PlayerInstanceEvent, Cancellab
 
     private boolean cancelled;
 
-    public PlayerChangeHeldSlotEvent(@NotNull Player player, byte oldSlot, byte newSlot) {
+    public PlayerChangeHeldSlotEvent(Player player, byte oldSlot, byte newSlot) {
         this.player = player;
         this.oldSlot = oldSlot;
         this.newSlot = newSlot;
-    }
-
-    /**
-     * Gets the slot which the player will hold.
-     * @deprecated Use {@link #getNewSlot()} instead.
-     * @return the future slot
-     */
-    @Deprecated(forRemoval = true)
-    public byte getSlot() {
-        return newSlot;
     }
 
     /**
@@ -40,7 +29,7 @@ public class PlayerChangeHeldSlotEvent implements PlayerInstanceEvent, Cancellab
      *
      * @return The slot index that the player currently is holding
      */
-    public int getOldSlot() {
+    public byte getOldSlot() {
         return oldSlot;
     }
 
@@ -50,19 +39,6 @@ public class PlayerChangeHeldSlotEvent implements PlayerInstanceEvent, Cancellab
      */
     public byte getNewSlot() {
         return newSlot;
-    }
-
-    /**
-     * Changes the final held slot of the player.
-     *
-     * @param slot the new held slot
-     * @deprecated Use {@link #setNewSlot(byte)} instead
-     * @throws IllegalArgumentException if <code>slot</code> is not between 0 and 8
-     */
-    @Deprecated(forRemoval = true)
-    public void setSlot(byte slot) {
-        Check.argCondition(!MathUtils.isBetween(slot, 0, 8), "The held slot needs to be between 0 and 8");
-        this.newSlot = slot;
     }
 
     /**
@@ -103,7 +79,7 @@ public class PlayerChangeHeldSlotEvent implements PlayerInstanceEvent, Cancellab
     }
 
     @Override
-    public @NotNull Player getPlayer() {
+    public Player getPlayer() {
         return player;
     }
 }

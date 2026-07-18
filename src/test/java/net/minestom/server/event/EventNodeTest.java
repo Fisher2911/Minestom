@@ -7,7 +7,6 @@ import net.minestom.server.event.trait.ItemEvent;
 import net.minestom.server.event.trait.RecursiveEvent;
 import net.minestom.server.item.ItemStack;
 import net.minestom.server.item.Material;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import java.lang.ref.WeakReference;
@@ -44,14 +43,14 @@ public class EventNodeTest {
 
     record ItemTestEvent(ItemStack item) implements ItemEvent {
         @Override
-        public @NotNull ItemStack getItemStack() {
+        public ItemStack getItemStack() {
             return item;
         }
     }
 
     record EntityTestEvent(Entity entity) implements EntityEvent {
         @Override
-        public @NotNull Entity getEntity() {
+        public Entity getEntity() {
             return entity;
         }
     }
@@ -185,14 +184,14 @@ public class EventNodeTest {
                 });
         node.addChild(child1);
         node.addChild(child2);
-        assertEquals(node.getChildren().size(), 2, "The node should have 2 children");
+        assertEquals(2, node.getChildren().size(), "The node should have 2 children");
         node.call(new EventTest());
         assertEquals(2, result.get(), "The event should be called after the call");
 
         // Test removal
         result.set(0);
         node.removeChild(child2);
-        assertEquals(node.getChildren().size(), 1, "The node should have 1 child");
+        assertEquals(1, node.getChildren().size(), "The node should have 1 child");
         node.call(new EventTest());
         assertEquals(1, result.get(), "child2 should has been removed");
 

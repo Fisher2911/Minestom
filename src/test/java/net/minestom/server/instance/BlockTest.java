@@ -4,6 +4,7 @@ import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.minestom.server.coordinate.Point;
 import net.minestom.server.coordinate.Vec;
 import net.minestom.server.instance.block.Block;
+import net.minestom.server.instance.block.BlockEntityType;
 import net.minestom.server.tag.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +13,6 @@ import java.util.Map;
 import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class BlockTest {
 
@@ -26,8 +26,10 @@ public class BlockTest {
         block = block.withNbt(nbt);
         assertTrue(block.hasNbt());
         assertEquals(block.nbt(), nbt);
+        assertSame(block, block.withNbt(nbt));
 
         block = block.withNbt(null);
+        assertSame(Block.CHEST, block);
         assertFalse(block.hasNbt());
         assertNull(block.nbt());
 
@@ -49,7 +51,7 @@ public class BlockTest {
             assertEquals(possible, block.withProperties(possible.properties()));
         }
 
-        assertEquals(block.withProperty("facing", "north").getProperty("facing"), "north");
+        assertEquals("north", block.withProperty("facing", "north").getProperty("facing"));
         assertNotEquals(block.withProperty("facing", "north"), block.withProperty("facing", "south"));
     }
 
@@ -60,6 +62,8 @@ public class BlockTest {
         assertEquals(Block.CHEST, Block.fromState("minecraft:chest"));
         assertEquals(Block.CHEST, Block.fromState("minecraft:chest[]"));
         assertEquals(Block.CHEST.withProperty("facing", "north"), Block.fromState("minecraft:chest[facing=north]"));
+        assertNull(Block.fromState("invalid namespace:dirt"));
+        assertNull(Block.fromState("invalid namespace:chest[facing=north]"));
     }
 
     @Test
@@ -76,7 +80,7 @@ public class BlockTest {
         Block b2 = Block.CHEST;
         assertEquals(b1.withNbt(nbt), b2.withNbt(nbt));
 
-        assertEquals(b1.withProperty("facing", "north").getProperty("facing"), "north");
+        assertEquals("north", b1.withProperty("facing", "north").getProperty("facing"));
         assertEquals(b1.withProperty("facing", "north"), b2.withProperty("facing", "north"));
     }
 
@@ -92,8 +96,8 @@ public class BlockTest {
         Point start = Block.LANTERN.registry().collisionShape().relativeStart();
         Point end = Block.LANTERN.registry().collisionShape().relativeEnd();
 
-        assertEquals(start, new Vec(0.3125, 0, 0.3125));
-        assertEquals(end, new Vec(0.6875, 0.5625, 0.6875));
+        assertEquals(new Vec(0.3125, 0, 0.3125), start);
+        assertEquals(new Vec(0.6875, 0.5625, 0.6875), end);
     }
 
     @Test
@@ -104,14 +108,25 @@ public class BlockTest {
                 assertTrue(assignedStates.add(blockWithState.stateId()));
             }
         }
+        assertEquals(Block.statesCount(), assignedStates.size());
     }
 
     @Test
-    public void testStateIdConversion() {
+    public void testStateConversions() {
         for (Block block : Block.values()) {
             for (Block blockWithState : block.possibleStates()) {
-                assertEquals(blockWithState, Block.fromStateId(blockWithState.stateId()));
+                assertSame(blockWithState, Block.fromStateId(blockWithState.stateId()));
+                assertSame(blockWithState, Block.fromState(blockWithState.state()));
+                assertSame(blockWithState, block.withProperties(blockWithState.properties()));
+                blockWithState.properties().forEach((property, value) ->
+                        assertEquals(value, blockWithState.getProperty(property)));
             }
         }
+    }
+
+    @Test
+    void testBlockEntityRegistryLoading() {
+        // Sanity to ensure we correctly load block entity types
+        assertEquals(BlockEntityType.SIGN, Block.OAK_SIGN.registry().blockEntityType());
     }
 }

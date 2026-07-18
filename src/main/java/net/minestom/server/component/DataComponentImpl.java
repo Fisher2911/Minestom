@@ -1,37 +1,44 @@
 package net.minestom.server.component;
 
 import net.kyori.adventure.key.Key;
+import net.kyori.adventure.key.KeyPattern;
 import net.minestom.server.codec.Codec;
 import net.minestom.server.codec.Result;
 import net.minestom.server.codec.Transcoder;
 import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.utils.collection.ObjectArray;
 import net.minestom.server.utils.validate.Check;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 
 record DataComponentImpl<T>(
         int id,
-        @NotNull Key key,
-        @Nullable NetworkBuffer.Type<T> network,
-        @Nullable Codec<T> codec
+        Key key,
+        @Nullable NetworkBuffer.Type<T> networkType,
+        @Nullable Codec<T> codec,
+        @Nullable UnaryOperator<T> freeze
 ) implements DataComponent<T> {
-    static final Map<String, DataComponent<?>> NAMESPACES = new HashMap<>(32);
+    static final Map<Key, DataComponent<?>> NAMESPACES = new HashMap<>(32);
     static final ObjectArray<DataComponent<?>> IDS = ObjectArray.singleThread(32);
 
-    static <T> DataComponent<T> register(@NotNull String name, @Nullable NetworkBuffer.Type<T> network, @Nullable Codec<T> nbt) {
-        DataComponent<T> impl = DataComponent.createHeadless(NAMESPACES.size(), Key.key(name), network, nbt);
-        NAMESPACES.put(impl.name(), impl);
+    static <T> DataComponent<T> register(@KeyPattern String name, @Nullable NetworkBuffer.Type<T> network, @Nullable Codec<T> nbt) {
+        return register(name, network, nbt, null);
+    }
+
+    // Used when Collections are involved, where T could still be mutable.
+    static <T> DataComponent<T> register(@KeyPattern String name, @Nullable NetworkBuffer.Type<T> network, @Nullable Codec<T> nbt, @Nullable UnaryOperator<T> freeze) {
+        DataComponent<T> impl = DataComponent.createHeadless(NAMESPACES.size(), Key.key(name), network, nbt, freeze);
+        NAMESPACES.put(impl.key(), impl);
         IDS.set(impl.id(), impl);
         return impl;
     }
 
     @Override
     public boolean isSynced() {
-        return network != null;
+        return networkType != null;
     }
 
     @Override
@@ -40,27 +47,33 @@ record DataComponentImpl<T>(
     }
 
     @Override
-    public @NotNull <D> Result<T> decode(@NotNull Transcoder<D> coder, @NotNull D value) {
+    public <D> Result<T> decode(Transcoder<D> coder, D value) {
         Check.notNull(codec, "{0} cannot be deserialized from Codec", this);
         return this.codec.decode(coder, value);
     }
 
     @Override
-    public @NotNull <D> Result<D> encode(@NotNull Transcoder<D> coder, @Nullable T value) {
+    public <D> Result<D> encode(Transcoder<D> coder, @Nullable T value) {
         Check.notNull(codec, "{0} cannot be deserialized from Codec", this);
         return this.codec.encode(coder, value);
     }
 
     @Override
-    public @NotNull T read(@NotNull NetworkBuffer reader) {
-        Check.notNull(network, "{0} cannot be deserialized from network", this);
-        return network.read(reader);
+    public T read(NetworkBuffer reader) {
+        Check.notNull(networkType, "{0} cannot be deserialized from network", this);
+        return networkType.read(reader);
     }
 
     @Override
-    public void write(@NotNull NetworkBuffer writer, @NotNull T value) {
-        Check.notNull(network, "{0} cannot be serialized to network", this);
-        network.write(writer, value);
+    public void write(NetworkBuffer writer, T value) {
+        Check.notNull(networkType, "{0} cannot be serialized to network", this);
+        networkType.write(writer, value);
+    }
+
+    @Override
+    public T freeze(T value) {
+        if (freeze == null) return value;
+        return freeze.apply(value);
     }
 
     @Override

@@ -1,9 +1,10 @@
 package net.minestom.server.instance.palette;
 
+import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.utils.MathUtils;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.function.IntUnaryOperator;
@@ -11,9 +12,19 @@ import java.util.function.IntUnaryOperator;
 import static net.minestom.server.network.NetworkBuffer.*;
 
 /**
- * Represents a palette used to store blocks and biomes.
- * <p>
- * 0 is the default value.
+ * Palette is a data storage with three storage models used to store blocks and biomes
+ * <br>
+ * Single Value Mode {@code (bitsPerEntry == 0)}: All blocks have the same value.
+ * No arrays allocated, value stored in count field.
+ * <br>
+ * Indirect Mode {@code (bitsPerEntry <= maxBitsPerEntry)}: Uses palette compression.
+ * Values array stores palette indices, paletteToValueList and valueToPaletteMap
+ * provide bidirectional mapping between indices and block values.
+ * <br>
+ * Direct Mode {@code (bitsPerEntry > maxBitsPerEntry)}: Stores block values directly.
+ * No palette structures, values array contains actual block values using directBits.
+ * <br>
+ * You can optimize for space/speed using {@link #optimize(Optimization)}
  */
 public sealed interface Palette permits PaletteImpl {
     int BLOCK_DIMENSION = 16;
@@ -53,11 +64,11 @@ public sealed interface Palette permits PaletteImpl {
 
     int get(int x, int y, int z);
 
-    void getAll(@NotNull EntryConsumer consumer);
+    void getAll(EntryConsumer consumer);
 
-    void getAllPresent(@NotNull EntryConsumer consumer);
+    void getAllPresent(EntryConsumer consumer);
 
-    int height(int x, int z, @NotNull EntryPredicate predicate);
+    int height(int x, int z, EntryPredicate predicate);
 
     void set(int x, int y, int z, int value);
 
@@ -69,11 +80,11 @@ public sealed interface Palette permits PaletteImpl {
 
     void replace(int oldValue, int newValue);
 
-    void setAll(@NotNull EntrySupplier supplier);
+    void setAll(EntrySupplier supplier);
 
-    void replace(int x, int y, int z, @NotNull IntUnaryOperator operator);
+    void replace(int x, int y, int z, IntUnaryOperator operator);
 
-    void replaceAll(@NotNull EntryFunction function);
+    void replaceAll(EntryFunction function);
 
     /**
      * Efficiently copies values from another palette with the given offset.
@@ -85,7 +96,7 @@ public sealed interface Palette permits PaletteImpl {
      * @param offsetY the Y offset to apply when copying
      * @param offsetZ the Z offset to apply when copying
      */
-    void copyFrom(@NotNull Palette source, int offsetX, int offsetY, int offsetZ);
+    void copyFrom(Palette source, int offsetX, int offsetY, int offsetZ);
 
     /**
      * Efficiently copies values from another palette starting at position (0, 0, 0).
@@ -96,7 +107,7 @@ public sealed interface Palette permits PaletteImpl {
      *
      * @param source the source palette to copy from
      */
-    void copyFrom(@NotNull Palette source);
+    void copyFrom(Palette source);
 
     /**
      * Returns the number of entries in this palette.
@@ -138,10 +149,25 @@ public sealed interface Palette permits PaletteImpl {
         return dimension * dimension * dimension;
     }
 
+    /**
+     * Attempts to optimize the current {@link Palette}
+     * <br>
+     * If plausible the only optimization will be performed is converting to a single value regardless of {@link Optimization}
+     * @param focus the optimization focus
+     */
     void optimize(Optimization focus);
 
+    /**
+     * An optimization mode to use with {@link #optimize(Optimization)}
+     */
     enum Optimization {
+        /**
+         * Will attempt to make indirect to save space.
+         */
         SIZE,
+        /**
+         * Will attempt to make direct to reduce lookup.
+         */
         SPEED,
     }
 
@@ -151,9 +177,9 @@ public sealed interface Palette permits PaletteImpl {
      * @param palette the palette to compare with
      * @return true if the palettes are equivalent, false otherwise
      */
-    boolean compare(@NotNull Palette palette);
+    boolean compare(Palette palette);
 
-    @NotNull Palette clone();
+    Palette clone();
 
     @ApiStatus.Internal
     int paletteIndexToValue(int value);
@@ -201,10 +227,10 @@ public sealed interface Palette permits PaletteImpl {
     }
 
     static NetworkBuffer.Type<Palette> serializer(int dimension, int minIndirect, int maxIndirect, int directBits) {
-        //noinspection unchecked
-        return (NetworkBuffer.Type) new NetworkBuffer.Type<PaletteImpl>() {
+        return new NetworkBuffer.Type<>() {
             @Override
-            public void write(@NotNull NetworkBuffer buffer, PaletteImpl value) {
+            public void write(NetworkBuffer buffer, Palette palette) {
+                PaletteImpl value = (PaletteImpl) palette;
                 // Temporary fix for biome direct bits depending on the number of registered biomes
                 if (directBits != value.directBits && !value.hasPalette()) {
                     PaletteImpl tmp = new PaletteImpl((byte) dimension, (byte) minIndirect, (byte) maxIndirect, (byte) directBits);
@@ -224,31 +250,36 @@ public sealed interface Palette permits PaletteImpl {
             }
 
             @Override
-            public PaletteImpl read(@NotNull NetworkBuffer buffer) {
+            public Palette read(NetworkBuffer buffer) {
                 final byte bitsPerEntry = buffer.read(BYTE);
+                if (bitsPerEntry != 0 && (bitsPerEntry < minIndirect || (bitsPerEntry > maxIndirect && bitsPerEntry != directBits)))
+                    throw new IllegalArgumentException("Invalid bitsPerEntry: " + bitsPerEntry);
+                PaletteImpl result = new PaletteImpl((byte) dimension, (byte) minIndirect, (byte) maxIndirect, (byte) directBits);
+                result.bitsPerEntry = bitsPerEntry;
                 if (bitsPerEntry == 0) {
                     // Single value palette
-                    final int value = buffer.read(VAR_INT);
-                    PaletteImpl palette = new PaletteImpl((byte) dimension, (byte) minIndirect, (byte) maxIndirect, (byte) directBits);
-                    palette.count = value;
-                    return palette;
-                } else if (bitsPerEntry >= minIndirect && bitsPerEntry <= maxIndirect) {
-                    // Indirect palette
-                    final int[] palette = buffer.read(VAR_INT_ARRAY);
-                    final long[] data = new long[Palettes.arrayLength(dimension, bitsPerEntry)];
-                    for (int i = 0; i < data.length; i++) data[i] = buffer.read(LONG);
-                    return new PaletteImpl((byte) dimension, (byte) minIndirect, (byte) maxIndirect, (byte) directBits, bitsPerEntry,
-                            Palettes.count(bitsPerEntry, data),
-                            palette, data);
-                } else {
-                    // Direct palette
-                    final int length = Palettes.arrayLength(dimension, bitsPerEntry);
-                    final long[] data = new long[length];
-                    for (int i = 0; i < length; i++) data[i] = buffer.read(LONG);
-                    return new PaletteImpl((byte) dimension, (byte) minIndirect, (byte) maxIndirect, (byte) directBits, bitsPerEntry,
-                            Palettes.count(bitsPerEntry, data),
-                            new int[0], data);
+                    result.count = buffer.read(VAR_INT);
+                    return result;
                 }
+                int[] palette = null;
+                if (result.hasPalette()) {
+                    // Indirect palette
+                    palette = buffer.read(VAR_INT_ARRAY);
+                    if (palette.length == 0 || palette.length > Palettes.maxPaletteSize(bitsPerEntry))
+                        throw new IllegalArgumentException("Invalid palette length: " + palette.length);
+                    result.paletteToValueList = new IntArrayList(palette);
+                    result.valueToPaletteMap = new Int2IntOpenHashMap(palette.length);
+                    result.valueToPaletteMap.defaultReturnValue(-1);
+                    for (int i = 0; i < palette.length; i++) {
+                        result.valueToPaletteMap.put(palette[i], i);
+                    }
+                }
+                final long[] data = new long[Palettes.arrayLength(dimension, bitsPerEntry)];
+                for (int i = 0; i < data.length; i++) data[i] = buffer.read(LONG);
+                result.values = data;
+                if (palette != null) Palettes.validateIndices(bitsPerEntry, dimension, data, palette.length);
+                result.recount();
+                return result;
             }
         };
     }

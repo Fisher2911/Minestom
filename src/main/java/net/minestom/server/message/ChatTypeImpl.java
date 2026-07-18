@@ -1,16 +1,15 @@
 package net.minestom.server.message;
 
-import net.minestom.server.utils.validate.Check;
-import org.jetbrains.annotations.NotNull;
+import java.util.Objects;
 
 record ChatTypeImpl(
-        @NotNull ChatTypeDecoration chat,
-        @NotNull ChatTypeDecoration narration
+        ChatTypeDecoration chat,
+        ChatTypeDecoration narration
 ) implements ChatType {
 
     ChatTypeImpl {
-        Check.notNull(chat, "missing chat");
-        Check.notNull(narration, "missing narration");
+        Objects.requireNonNull(chat, "missing chat");
+        Objects.requireNonNull(narration, "missing narration");
     }
 
 }

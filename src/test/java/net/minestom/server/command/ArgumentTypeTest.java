@@ -1,5 +1,6 @@
 package net.minestom.server.command;
 
+import net.kyori.adventure.key.Key;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.kyori.adventure.nbt.IntArrayBinaryTag;
 import net.kyori.adventure.nbt.IntBinaryTag;
@@ -10,6 +11,7 @@ import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 import net.minestom.server.MinecraftServer;
+import net.minestom.server.color.TeamColor;
 import net.minestom.server.command.builder.arguments.Argument;
 import net.minestom.server.command.builder.arguments.ArgumentEnum;
 import net.minestom.server.command.builder.arguments.ArgumentType;
@@ -37,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class ArgumentTypeTest {
 
     static {
-        MinecraftServer.init();
+        MinecraftServer.init(); // TODO, some args require a ServerProcess.
     }
 
     @Test
@@ -68,11 +70,10 @@ public class ArgumentTypeTest {
     }
 
     @Test
-    public void testArgumentColor() {
-        var arg = ArgumentType.Color("color");
+    public void testArgumentTeamColor() {
+        var arg = ArgumentType.TeamColor("color");
         assertInvalidArg(arg, "invalid_color");
-        assertArg(arg, Style.style(NamedTextColor.DARK_PURPLE), "dark_purple");
-        assertArg(arg, Style.empty(), "reset");
+        assertArg(arg, TeamColor.DARK_PURPLE, "dark_purple");
     }
 
     @Test
@@ -121,8 +122,19 @@ public class ArgumentTypeTest {
 
         assertValidArg(arg, "@e[distance=500]");
         assertValidArg(arg, "@e[distance=50..150]");
+        assertValidArg(arg, "@e[distance=5..]");
+        assertValidArg(arg, "@e[distance=..10]");
+        assertValidArg(arg, "@e[distance=1.5..3.5]");
         assertInvalidArg(arg, "@e[distance=-500-500]");
-        assertInvalidArg(arg, "@e[distance=2147483648]");
+        assertInvalidArg(arg, "@e[distance=-5]");
+        assertInvalidArg(arg, "@e[distance=-3..-1]");
+        assertInvalidArg(arg, "@e[distance=..-3]");
+        assertInvalidArg(arg, "@e[distance=NaN]");
+        assertInvalidArg(arg, "@e[distance=Infinity..]");
+
+        assertInvalidArg(arg, "@e[type=pig,garbage]");
+        assertInvalidArg(arg, "@e[type=pig,]");
+        assertInvalidArg(arg, "@e[garbage]");
     }
 
     @Test
@@ -131,8 +143,8 @@ public class ArgumentTypeTest {
         assertArg(arg, new Range.Float(0f, 50f), "0..50");
         assertArg(arg, new Range.Float(0f, 0f), "0..0");
         assertArg(arg, new Range.Float(-50f, 0f), "-50..0");
-        assertArg(arg, new Range.Float(-Float.MAX_VALUE, 50f), "..50");
-        assertArg(arg, new Range.Float(0f, Float.MAX_VALUE), "0..");
+        assertArg(arg, new Range.Float(null, 50f), "..50");
+        assertArg(arg, new Range.Float(0f, null), "0..");
         assertArg(arg, new Range.Float(-Float.MAX_VALUE, Float.MAX_VALUE), "-3.4028235E38..3.4028235E38");
         assertArg(arg, new Range.Float(0.5f, 24f), "0.5..24");
         assertArg(arg, new Range.Float(12f, 45.6f), "12..45.6");
@@ -147,8 +159,8 @@ public class ArgumentTypeTest {
         assertArg(arg, new Range.Int(0, 50), "0..50");
         assertArg(arg, new Range.Int(0, 0), "0..0");
         assertArg(arg, new Range.Int(-50, 0), "-50..0");
-        assertArg(arg, new Range.Int(Integer.MIN_VALUE, 50), "..50");
-        assertArg(arg, new Range.Int(0, Integer.MAX_VALUE), "0..");
+        assertArg(arg, new Range.Int(null, 50), "..50");
+        assertArg(arg, new Range.Int(0, null), "0..");
         assertArg(arg, new Range.Int(Integer.MIN_VALUE, Integer.MAX_VALUE), "-2147483648..2147483647");
 
         assertInvalidArg(arg, "..");
@@ -210,9 +222,14 @@ public class ArgumentTypeTest {
     @Test
     public void testArgumentResourceLocation() {
         var arg = ArgumentType.ResourceLocation("resource_location");
-        assertArg(arg, "minecraft:resource_location_example", "minecraft:resource_location_example");
+
+        assertArg(arg, Key.key("foo:bar"), "foo:bar");
+        assertArg(arg, Key.key("minecraft:air"), "air");
+        assertArg(arg, Key.key("minecraft:foo/bar"), "foo/bar");
+
         assertInvalidArg(arg, "minecraft:invalid resource location");
-        //assertInvalidArg(arg, "minecraft:");
+        assertInvalidArg(arg, "!");
+        assertInvalidArg(arg, "a/b:empty");
     }
 
     @Test
@@ -270,7 +287,7 @@ public class ArgumentTypeTest {
     @Test
     public void testArgumentLong() {
         var arg = ArgumentType.Long("long");
-        assertArg(arg, 2564l, "2564");
+        assertArg(arg, 2564L, "2564");
         assertInvalidArg(arg, "256.4");
         assertInvalidArg(arg, "9223372036854775808");
     }

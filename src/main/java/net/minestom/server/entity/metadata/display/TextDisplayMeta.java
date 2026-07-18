@@ -4,18 +4,18 @@ import net.kyori.adventure.text.Component;
 import net.minestom.server.entity.Entity;
 import net.minestom.server.entity.MetadataDef;
 import net.minestom.server.entity.MetadataHolder;
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class TextDisplayMeta extends AbstractDisplayMeta {
-    public TextDisplayMeta(@NotNull Entity entity, @NotNull MetadataHolder metadata) {
+    public TextDisplayMeta(@Nullable Entity entity, MetadataHolder metadata) {
         super(entity, metadata);
     }
 
-    public @NotNull Component getText() {
+    public Component getText() {
         return metadata.get(MetadataDef.TextDisplay.TEXT);
     }
 
-    public void setText(@NotNull Component value) {
+    public void setText(Component value) {
         metadata.set(MetadataDef.TextDisplay.TEXT, value);
     }
 

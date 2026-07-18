@@ -4,7 +4,6 @@ import net.minestom.server.network.ConnectionState;
 import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.network.packet.client.ClientPacket;
 import net.minestom.server.network.packet.server.ServerPacket;
-import org.jetbrains.annotations.NotNull;
 
 /**
  * Responsible for parsing client and server packets.
@@ -14,23 +13,23 @@ import org.jetbrains.annotations.NotNull;
  */
 public sealed interface PacketParser<T> {
 
-    @NotNull PacketRegistry<T> handshake();
+    PacketRegistry<? extends T> handshake();
 
-    @NotNull PacketRegistry<T> status();
+    PacketRegistry<? extends T> status();
 
-    @NotNull PacketRegistry<T> login();
+    PacketRegistry<? extends T> login();
 
-    @NotNull PacketRegistry<T> configuration();
+    PacketRegistry<? extends T> configuration();
 
-    @NotNull PacketRegistry<T> play();
+    PacketRegistry<? extends T> play();
 
-    default @NotNull T parse(@NotNull ConnectionState connectionState,
-                             int packetId, @NotNull NetworkBuffer buffer) {
-        final PacketRegistry<T> registry = stateRegistry(connectionState);
+    default T parse(ConnectionState connectionState,
+                             int packetId, NetworkBuffer buffer) {
+        final PacketRegistry<? extends T> registry = stateRegistry(connectionState);
         return registry.create(packetId, buffer);
     }
 
-    default @NotNull PacketRegistry<T> stateRegistry(@NotNull ConnectionState connectionState) {
+    default PacketRegistry<? extends T> stateRegistry(ConnectionState connectionState) {
         return switch (connectionState) {
             case HANDSHAKE -> handshake();
             case STATUS -> status();
@@ -41,38 +40,20 @@ public sealed interface PacketParser<T> {
     }
 
     record Client(
-            PacketRegistry<ClientPacket> handshake,
-            PacketRegistry<ClientPacket> status,
-            PacketRegistry<ClientPacket> login,
-            PacketRegistry<ClientPacket> configuration,
-            PacketRegistry<ClientPacket> play
+            PacketRegistry<ClientPacket.Handshake> handshake,
+            PacketRegistry<ClientPacket.Status> status,
+            PacketRegistry<ClientPacket.Login> login,
+            PacketRegistry<ClientPacket.Configuration> configuration,
+            PacketRegistry<ClientPacket.Play> play
     ) implements PacketParser<ClientPacket> {
-        public Client() {
-            this(
-                    new PacketRegistry.ClientHandshake(),
-                    new PacketRegistry.ClientStatus(),
-                    new PacketRegistry.ClientLogin(),
-                    new PacketRegistry.ClientConfiguration(),
-                    new PacketRegistry.ClientPlay()
-            );
-        }
     }
 
     record Server(
-            PacketRegistry<ServerPacket> handshake,
-            PacketRegistry<ServerPacket> status,
-            PacketRegistry<ServerPacket> login,
-            PacketRegistry<ServerPacket> configuration,
-            PacketRegistry<ServerPacket> play
+            PacketRegistry<ServerPacket.Handshake> handshake,
+            PacketRegistry<ServerPacket.Status> status,
+            PacketRegistry<ServerPacket.Login> login,
+            PacketRegistry<ServerPacket.Configuration> configuration,
+            PacketRegistry<ServerPacket.Play> play
     ) implements PacketParser<ServerPacket> {
-        public Server() {
-            this(
-                    new PacketRegistry.ServerHandshake(),
-                    new PacketRegistry.ServerStatus(),
-                    new PacketRegistry.ServerLogin(),
-                    new PacketRegistry.ServerConfiguration(),
-                    new PacketRegistry.ServerPlay()
-            );
-        }
     }
 }

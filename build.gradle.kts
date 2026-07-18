@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.blossom)
 
     alias(libs.plugins.nmcp.aggregation)
+    alias(libs.plugins.graalvm.native)
 }
 
 sourceSets {
@@ -42,7 +43,7 @@ dependencies {
     implementation(libs.minestomData)
 
     // Performance/data structures
-    api(libs.fastutil)
+    implementation(libs.fastutil)
     implementation(libs.bundles.flare)
     api(libs.gson)
     implementation(libs.jcTools)
@@ -50,9 +51,39 @@ dependencies {
     testImplementation(project(":testing"))
 }
 
-tasks.jar {
-    manifest {
-        attributes("Automatic-Module-Name" to "net.minestom.server")
+tasks.withType<JavaCompile> {
+    options.compilerArgs.add("-Xlint:-requires-transitive-automatic") // Adventure dependencies are automatic until 5.0.0, see https://github.com/KyoriPowered/adventure/issues/1287
+}
+
+graalvmNative {
+    agent {
+        defaultMode = "standard"
+
+        modes {
+            standard {
+                val file = layout.projectDirectory.file("src/test/resources/agent-filter.json").asFile.absolutePath
+                callerFilterFiles.from(file)
+                accessFilterFiles.from(file)
+            }
+        }
+
+        metadataCopy {
+            inputTaskNames.add("test")
+            outputDirectories.add("src/main/resources/META-INF/native-image/net.minestom/minestom")
+        }
+    }
+    binaries {
+        named("test") {
+            buildArgs.add("-Ob")
+
+            systemProperties.put("minestom.viewable-packet", "false")
+            systemProperties.put("minestom.inside-test", "true")
+            systemProperties.put("minestom.acquirable-strict", "true")
+
+            runtimeArgs.add("-Dminestom.viewable-packet=false")
+            runtimeArgs.add("-Dminestom.inside-test=true")
+            runtimeArgs.add("-Dminestom.acquirable-strict=true")
+        }
     }
 }
 

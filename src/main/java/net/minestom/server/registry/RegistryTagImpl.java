@@ -2,7 +2,6 @@ package net.minestom.server.registry;
 
 import net.minestom.server.MinecraftServer;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
@@ -22,12 +21,12 @@ final class RegistryTagImpl {
         }
 
         @Override
-        public boolean contains(@NotNull RegistryKey<Object> value) {
+        public boolean contains(RegistryKey<Object> value) {
             return false;
         }
 
         @Override
-        public @NotNull Iterator<RegistryKey<Object>> iterator() {
+        public Iterator<RegistryKey<Object>> iterator() {
             return Collections.emptyIterator();
         }
 
@@ -44,16 +43,16 @@ final class RegistryTagImpl {
         private final TagKey<T> key;
         private final Set<RegistryKey<T>> entries = new CopyOnWriteArraySet<>();
 
-        Backed(@NotNull TagKey<T> key) {
+        Backed(TagKey<T> key) {
             this.key = key;
         }
 
-        public @NotNull TagKey<T> key() {
+        public TagKey<T> key() {
             return key;
         }
 
         @Override
-        public boolean contains(@NotNull RegistryKey<T> value) {
+        public boolean contains(RegistryKey<T> value) {
             return entries.contains(value instanceof RegistryKeyImpl<T> key ? key : new RegistryKeyImpl<>(value.key()));
         }
 
@@ -63,18 +62,18 @@ final class RegistryTagImpl {
         }
 
         @Override
-        public @NotNull Iterator<RegistryKey<T>> iterator() {
+        public Iterator<RegistryKey<T>> iterator() {
             return entries.iterator();
         }
 
         @ApiStatus.Internal
-        void add(@NotNull RegistryKey<T> key) {
+        void add(RegistryKey<T> key) {
             if (entries.add(key))
                 invalidate();
         }
 
         @ApiStatus.Internal
-        void remove(@NotNull RegistryKey<T> key) {
+        void remove(RegistryKey<T> key) {
             if (entries.remove(key))
                 invalidate();
         }
@@ -86,7 +85,7 @@ final class RegistryTagImpl {
         }
     }
 
-    record Direct<T>(@NotNull List<RegistryKey<T>> keys) implements RegistryTag<T> {
+    record Direct<T>(List<RegistryKey<T>> keys) implements RegistryTag<T> {
         public Direct {
             keys = List.copyOf(keys);
         }
@@ -97,18 +96,39 @@ final class RegistryTagImpl {
         }
 
         @Override
-        public boolean contains(@NotNull RegistryKey<T> value) {
+        public boolean contains(RegistryKey<T> value) {
             return keys.contains(value instanceof RegistryKeyImpl<T> key ? key : new RegistryKeyImpl<>(value.key()));
         }
 
         @Override
-        public @NotNull Iterator<RegistryKey<T>> iterator() {
+        public Iterator<RegistryKey<T>> iterator() {
             return keys.iterator();
         }
 
         @Override
         public int size() {
             return keys.size();
+        }
+
+        // Equality is defined by the underlying keys rather than the concrete RegistryKey
+        // implementation, so a tag built from registry values (e.g. Material) is equal to an
+        // equivalent tag read back from the network (which holds RegistryKeyImpl instances).
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof RegistryTagImpl.Direct<?>(var keys1))
+                    || keys.size() != keys1.size()) return false;
+            for (int i = 0; i < keys.size(); i++)
+                if (!keys.get(i).key().equals(keys1.get(i).key())) return false;
+            return true;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = 1;
+            for (RegistryKey<T> key : keys)
+                result = 31 * result + key.key().hashCode();
+            return result;
         }
     }
 

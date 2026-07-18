@@ -5,13 +5,12 @@ import net.minestom.server.network.NetworkBufferTemplate;
 import net.minestom.server.network.packet.client.ClientPacket;
 import net.minestom.server.network.packet.server.configuration.SelectKnownPacksPacket;
 import net.minestom.server.utils.validate.Check;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
 public record ClientSelectKnownPacksPacket(
-        @NotNull List<SelectKnownPacksPacket.Entry> entries
-) implements ClientPacket {
+        List<SelectKnownPacksPacket.Entry> entries
+) implements ClientPacket.Configuration {
     private static final int MAX_ENTRIES = 64;
 
     public static final NetworkBuffer.Type<ClientSelectKnownPacksPacket> SERIALIZER = NetworkBufferTemplate.template(

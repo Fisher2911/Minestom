@@ -6,38 +6,37 @@ import net.kyori.adventure.text.*;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.*;
+import net.kyori.adventure.text.object.PlayerHeadObjectContents;
+import net.kyori.adventure.text.object.SpriteObjectContents;
 import net.minestom.server.adventure.MinestomAdventure;
 import net.minestom.server.adventure.serializer.nbt.NbtDataComponentValue;
 import net.minestom.server.codec.Codec;
 import net.minestom.server.codec.Transcoder;
 import net.minestom.server.dialog.Dialog;
+import net.minestom.server.registry.Registries;
 import net.minestom.server.registry.RegistryTranscoder;
 import net.minestom.server.utils.nbt.BinaryTagWriter;
-import net.minestom.server.utils.validate.Check;
-import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 
 import static net.minestom.server.network.NetworkBuffer.*;
-import static net.minestom.server.network.NetworkBufferImpl.impl;
 
 record ComponentNetworkBufferTypeImpl() implements NetworkBufferTypeImpl<Component> {
 
     @Override
-    public void write(@NotNull NetworkBuffer buffer, @NotNull Component value) {
-        Check.notNull(value, "Component cannot be null");
+    public void write(NetworkBuffer buffer, Component value) {
+        Objects.requireNonNull(value, "Component cannot be null");
 
         buffer.write(BYTE, TAG_COMPOUND);
         writeInnerComponent(buffer, value);
     }
 
     @Override
-    public Component read(@NotNull NetworkBuffer buffer) {
-        final Transcoder<BinaryTag> coder = buffer.registries() != null
-                ? new RegistryTranscoder<>(Transcoder.NBT, buffer.registries())
+    public Component read(NetworkBuffer buffer) {
+        final Registries registries = buffer.registries();
+        final Transcoder<BinaryTag> coder = registries != null
+                ? new RegistryTranscoder<>(Transcoder.NBT, registries)
                 : Transcoder.NBT;
         return Codec.COMPONENT.decode(coder, buffer.read(NBT)).orElseThrow();
     }
@@ -50,8 +49,9 @@ record ComponentNetworkBufferTypeImpl() implements NetworkBufferTypeImpl<Compone
     private static final byte TAG_STRING = 8;
     private static final byte TAG_LIST = 9;
     private static final byte TAG_COMPOUND = 10;
+    private static final byte TAG_INT_ARRAY = 11;
 
-    private void writeInnerComponent(@NotNull NetworkBuffer buffer, @NotNull Component component) {
+    private void writeInnerComponent(NetworkBuffer buffer, Component component) {
         buffer.write(BYTE, TAG_STRING); // Start first tag (always the type)
         buffer.write(STRING_IO_UTF8, "type");
         switch (component) {
@@ -124,9 +124,100 @@ record ComponentNetworkBufferTypeImpl() implements NetworkBufferTypeImpl<Compone
                 buffer.write(STRING_IO_UTF8, "keybind");
                 buffer.write(STRING_IO_UTF8, keybind.keybind());
             }
-            case NBTComponent<?, ?> nbt -> {
+            case NBTComponent<?> _ -> {
                 //todo
                 throw new UnsupportedOperationException("NBTComponent is not implemented yet");
+            }
+            case ObjectComponent object -> {
+                buffer.write(STRING_IO_UTF8, "object");
+
+                switch (object.contents()) {
+                    case SpriteObjectContents sprite -> {
+                        if (!sprite.atlas().equals(SpriteObjectContents.DEFAULT_ATLAS)) {
+                            buffer.write(BYTE, TAG_STRING);
+                            buffer.write(STRING_IO_UTF8, "atlas");
+                            buffer.write(STRING_IO_UTF8, sprite.atlas().asMinimalString());
+                        }
+
+                        buffer.write(BYTE, TAG_STRING);
+                        buffer.write(STRING_IO_UTF8, "sprite");
+                        buffer.write(STRING_IO_UTF8, sprite.sprite().asMinimalString());
+                    }
+                    case PlayerHeadObjectContents player -> {
+                        buffer.write(BYTE, TAG_COMPOUND); // Start "player" tag
+                        buffer.write(STRING_IO_UTF8, "player");
+                        {
+                            final String name = player.name();
+                            if (name != null) {
+                                buffer.write(BYTE, TAG_STRING);
+                                buffer.write(STRING_IO_UTF8, "name");
+                                buffer.write(STRING_IO_UTF8, name);
+                            }
+
+                            final UUID id = player.id();
+                            if (id != null) {
+                                buffer.write(BYTE, TAG_INT_ARRAY);
+                                buffer.write(STRING_IO_UTF8, "id");
+                                buffer.write(INT, 4);
+
+                                final long uuidMost = id.getMostSignificantBits();
+                                final long uuidLeast = id.getLeastSignificantBits();
+                                buffer.write(INT, (int) (uuidMost >> 32));
+                                buffer.write(INT, (int) uuidMost);
+                                buffer.write(INT, (int) (uuidLeast >> 32));
+                                buffer.write(INT, (int) uuidLeast);
+                            }
+
+                            int propertyCount = player.profileProperties().size();
+                            if (propertyCount > 0) {
+                                buffer.write(BYTE, TAG_LIST);
+                                buffer.write(STRING_IO_UTF8, "properties");
+                                buffer.write(BYTE, TAG_COMPOUND); // List type
+                                buffer.write(INT, propertyCount);
+
+                                for (PlayerHeadObjectContents.ProfileProperty property : player.profileProperties()) {
+                                    buffer.write(BYTE, TAG_STRING);
+                                    buffer.write(STRING_IO_UTF8, "name");
+                                    buffer.write(STRING_IO_UTF8, property.name());
+
+                                    buffer.write(BYTE, TAG_STRING);
+                                    buffer.write(STRING_IO_UTF8, "value");
+                                    buffer.write(STRING_IO_UTF8, property.value());
+
+                                    final String signature = property.signature();
+                                    if (signature != null) {
+                                        buffer.write(BYTE, TAG_STRING);
+                                        buffer.write(STRING_IO_UTF8, "signature");
+                                        buffer.write(STRING_IO_UTF8, signature);
+                                    }
+
+                                    buffer.write(BYTE, TAG_END); // End property object
+                                }
+                            }
+
+                            final Key texture = player.texture();
+                            if (texture != null) {
+                                buffer.write(BYTE, TAG_STRING);
+                                buffer.write(STRING_IO_UTF8, "body");
+                                buffer.write(STRING_IO_UTF8, texture.asMinimalString());
+                            }
+                        }
+                        buffer.write(BYTE, TAG_END); // End "player" tag
+
+                        if (!player.hat()) {
+                            buffer.write(BYTE, TAG_BYTE);
+                            buffer.write(STRING_IO_UTF8, "hat");
+                            buffer.write(BYTE, (byte) 0);
+                        }
+                    }
+                    default -> throw new UnsupportedOperationException("Unknown object contents: " + object.contents());
+                }
+                var fallback = object.fallback();
+                if (fallback != null) {
+                    buffer.write(BYTE, TAG_STRING);
+                    buffer.write(STRING_IO_UTF8, "fallback");
+                    writeInnerComponent(buffer, fallback);
+                }
             }
             default -> throw new UnsupportedOperationException("Unsupported component type: " + component.getClass());
         }
@@ -148,13 +239,13 @@ record ComponentNetworkBufferTypeImpl() implements NetworkBufferTypeImpl<Compone
         buffer.write(BYTE, TAG_END);
     }
 
-    private void writeComponentStyle(@NotNull NetworkBuffer buffer, @NotNull Style style) {
+    private void writeComponentStyle(NetworkBuffer buffer, Style style) {
         final TextColor color = style.color();
         if (color != null) {
             buffer.write(BYTE, TAG_STRING);
             buffer.write(STRING_IO_UTF8, "color");
             if (color instanceof NamedTextColor namedColor)
-                buffer.write(STRING_IO_UTF8, namedColor.toString());
+                buffer.write(STRING_IO_UTF8, namedColor.name());
             else buffer.write(STRING_IO_UTF8, color.asHexString());
         }
 
@@ -214,75 +305,77 @@ record ComponentNetworkBufferTypeImpl() implements NetworkBufferTypeImpl<Compone
             buffer.write(STRING_IO_UTF8, insertion);
         }
 
-        final ClickEvent clickEvent = style.clickEvent();
+        final ClickEvent<?> clickEvent = style.clickEvent();
         if (clickEvent != null) writeClickEvent(buffer, clickEvent);
 
         final HoverEvent<?> hoverEvent = style.hoverEvent();
         if (hoverEvent != null) writeHoverEvent(buffer, hoverEvent);
     }
 
-    private void writeClickEvent(@NotNull NetworkBuffer buffer, @NotNull ClickEvent clickEvent) {
+    private void writeClickEvent(NetworkBuffer buffer, ClickEvent<?> clickEvent) {
         buffer.write(BYTE, TAG_COMPOUND);
         buffer.write(STRING_IO_UTF8, "click_event");
 
         buffer.write(BYTE, TAG_STRING);
         buffer.write(STRING_IO_UTF8, "action");
-        buffer.write(STRING_IO_UTF8, clickEvent.action().name().toLowerCase(Locale.ROOT));
+        assert clickEvent.action().name().toLowerCase(Locale.ROOT).equals(clickEvent.action().name()) : "action is not lowercase";
+        buffer.write(STRING_IO_UTF8, clickEvent.action().name());
 
         switch (clickEvent.action()) {
-            case OPEN_URL -> {
+            case ClickEvent.Action.OpenUrl _ -> {
                 final ClickEvent.Payload.Text payload = checkPayload(clickEvent, ClickEvent.Payload.Text.class);
                 buffer.write(BYTE, TAG_STRING);
                 buffer.write(STRING_IO_UTF8, "url");
                 buffer.write(STRING_IO_UTF8, payload.value());
             }
-            case OPEN_FILE -> {
+            case ClickEvent.Action.OpenFile _ -> {
                 final ClickEvent.Payload.Text payload = checkPayload(clickEvent, ClickEvent.Payload.Text.class);
                 buffer.write(BYTE, TAG_STRING);
                 buffer.write(STRING_IO_UTF8, "path");
                 buffer.write(STRING_IO_UTF8, payload.value());
             }
-            case RUN_COMMAND, SUGGEST_COMMAND -> {
+            case ClickEvent.Action.RunCommand _, ClickEvent.Action.SuggestCommand _ -> {
                 final ClickEvent.Payload.Text payload = checkPayload(clickEvent, ClickEvent.Payload.Text.class);
                 buffer.write(BYTE, TAG_STRING);
                 buffer.write(STRING_IO_UTF8, "command");
                 buffer.write(STRING_IO_UTF8, payload.value());
             }
-            case CHANGE_PAGE -> {
+            case ClickEvent.Action.ChangePage _ -> {
                 final ClickEvent.Payload.Int payload = checkPayload(clickEvent, ClickEvent.Payload.Int.class);
                 buffer.write(BYTE, TAG_INT);
                 buffer.write(STRING_IO_UTF8, "page");
                 buffer.write(INT, payload.integer());
             }
-            case COPY_TO_CLIPBOARD -> {
+            case ClickEvent.Action.CopyToClipboard _ -> {
                 final ClickEvent.Payload.Text payload = checkPayload(clickEvent, ClickEvent.Payload.Text.class);
                 buffer.write(BYTE, TAG_STRING);
                 buffer.write(STRING_IO_UTF8, "value");
                 buffer.write(STRING_IO_UTF8, payload.value());
             }
-            case SHOW_DIALOG -> {
+            case ClickEvent.Action.ShowDialog _ -> {
                 final ClickEvent.Payload.Dialog payload = checkPayload(clickEvent, ClickEvent.Payload.Dialog.class);
 
                 try {
-                    final Transcoder<BinaryTag> coder = buffer.registries() != null
-                            ? new RegistryTranscoder<>(Transcoder.NBT, buffer.registries())
+                    final Registries registries = buffer.registries();
+                    final Transcoder<BinaryTag> coder = registries != null
+                            ? new RegistryTranscoder<>(Transcoder.NBT, registries)
                             : Transcoder.NBT;
                     final BinaryTag dialog = Dialog.CODEC.encode(coder, Dialog.unwrap(payload.dialog())).orElseThrow();
 
-                    final BinaryTagWriter nbtWriter = impl(buffer).nbtWriter();
+                    final BinaryTagWriter nbtWriter = new BinaryTagWriter(buffer.ioView());
                     nbtWriter.writeNamed("dialog", dialog);
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to write dialog click event payload", e);
                 }
             }
-            case CUSTOM -> {
+            case ClickEvent.Action.Custom _ -> {
                 final ClickEvent.Payload.Custom payload = checkPayload(clickEvent, ClickEvent.Payload.Custom.class);
                 buffer.write(BYTE, TAG_STRING);
                 buffer.write(STRING_IO_UTF8, "id");
                 buffer.write(STRING_IO_UTF8, payload.key().asString());
 
                 try {
-                    final BinaryTagWriter nbtWriter = impl(buffer).nbtWriter();
+                    final BinaryTagWriter nbtWriter = new BinaryTagWriter(buffer.ioView());
                     nbtWriter.writeNamed("payload", MinestomAdventure.unwrapNbt(payload.nbt()));
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to write custom click event payload", e);
@@ -294,15 +387,16 @@ record ComponentNetworkBufferTypeImpl() implements NetworkBufferTypeImpl<Compone
         buffer.write(BYTE, TAG_END);
     }
 
-    private <T extends ClickEvent.Payload> @NotNull T checkPayload(@NotNull ClickEvent clickEvent, @NotNull Class<T> expected) {
+    private <T extends ClickEvent.Payload> T checkPayload(ClickEvent<?> clickEvent, Class<T> expected) {
         final ClickEvent.Payload payload = clickEvent.payload();
         if (!expected.isInstance(payload))
-            throw new IllegalArgumentException("Expected " + expected.getSimpleName() + " for " + clickEvent.action() + ", got: " + payload.getClass());
+            throw new IllegalArgumentException(
+                    "Expected " + expected.getSimpleName() + " for " + clickEvent.action() + ", got: " + payload.getClass());
         return expected.cast(payload);
     }
 
     @SuppressWarnings("unchecked")
-    private void writeHoverEvent(@NotNull NetworkBuffer buffer, @NotNull HoverEvent<?> hoverEvent) {
+    private void writeHoverEvent(NetworkBuffer buffer, HoverEvent<?> hoverEvent) {
         buffer.write(BYTE, TAG_COMPOUND);
         buffer.write(STRING_IO_UTF8, "hover_event");
 
@@ -329,7 +423,7 @@ record ComponentNetworkBufferTypeImpl() implements NetworkBufferTypeImpl<Compone
             buffer.write(STRING_IO_UTF8, "components");
             final Map<Key, NbtDataComponentValue> dataComponents = value.dataComponentsAs(NbtDataComponentValue.class);
             if (!dataComponents.isEmpty()) {
-                final BinaryTagWriter nbtWriter = impl(buffer).nbtWriter();
+                final BinaryTagWriter nbtWriter = new BinaryTagWriter(buffer.ioView());
                 try {
                     for (final Map.Entry<Key, NbtDataComponentValue> entry : dataComponents.entrySet()) {
                         final BinaryTag dataComponentValue = entry.getValue().value();

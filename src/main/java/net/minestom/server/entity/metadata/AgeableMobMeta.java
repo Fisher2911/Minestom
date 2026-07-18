@@ -4,10 +4,10 @@ import net.minestom.server.collision.BoundingBox;
 import net.minestom.server.entity.Entity;
 import net.minestom.server.entity.MetadataDef;
 import net.minestom.server.entity.MetadataHolder;
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class AgeableMobMeta extends PathfinderMobMeta {
-    protected AgeableMobMeta(@NotNull Entity entity, @NotNull MetadataHolder metadata) {
+    protected AgeableMobMeta(@Nullable Entity entity, MetadataHolder metadata) {
         super(entity, metadata);
     }
 
@@ -32,4 +32,11 @@ public class AgeableMobMeta extends PathfinderMobMeta {
         metadata.set(MetadataDef.AgeableMob.IS_BABY, value);
     }
 
+    public boolean isAgeLocked() {
+        return metadata.get(MetadataDef.AgeableMob.AGE_LOCKED);
+    }
+
+    public void setAgeLocked(boolean value) {
+        metadata.set(MetadataDef.AgeableMob.AGE_LOCKED, value);
+    }
 }

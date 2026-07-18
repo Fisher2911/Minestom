@@ -2,20 +2,23 @@ package net.minestom.server.entity;
 
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.key.KeyPattern;
+import net.kyori.adventure.translation.Translatable;
 import net.minestom.server.codec.Codec;
+import net.minestom.server.entity.attribute.Attribute;
 import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.registry.Registry;
 import net.minestom.server.registry.RegistryData;
 import net.minestom.server.registry.StaticProtocolObject;
 import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
+import java.util.Map;
 
-public sealed interface EntityType extends StaticProtocolObject<EntityType>, EntityTypes permits EntityTypeImpl {
+public sealed interface EntityType extends StaticProtocolObject<EntityType>, EntityTypes, Translatable
+        permits EntityTypeImpl {
     NetworkBuffer.Type<EntityType> NETWORK_TYPE = NetworkBuffer.VAR_INT.transform(EntityType::fromId, EntityType::id);
-    Codec<EntityType> CODEC = Codec.INT.transform(EntityType::fromId, EntityType::id);
+    Codec<EntityType> CODEC = Codec.KEY.transform(EntityType::fromKey, EntityType::key);
 
     /**
      * Returns the entity registry.
@@ -23,10 +26,10 @@ public sealed interface EntityType extends StaticProtocolObject<EntityType>, Ent
      * @return the entity registry
      */
     @Contract(pure = true)
-    @NotNull RegistryData.EntityEntry registry();
+    RegistryData.EntityEntry registry();
 
     @Override
-    default @NotNull Key key() {
+    default Key key() {
         return registry().key();
     }
 
@@ -43,15 +46,24 @@ public sealed interface EntityType extends StaticProtocolObject<EntityType>, Ent
         return registry().height();
     }
 
-    static @NotNull Collection<@NotNull EntityType> values() {
+    default Map<Attribute, Double> defaultAttributes() {
+        return registry().defaultAttributes();
+    }
+
+    @Override
+    default String translationKey() {
+        return registry().translationKey();
+    }
+
+    static Collection<EntityType> values() {
         return EntityTypeImpl.REGISTRY.values();
     }
 
-    static @Nullable EntityType fromKey(@KeyPattern @NotNull String key) {
+    static @Nullable EntityType fromKey(@KeyPattern String key) {
         return fromKey(Key.key(key));
     }
 
-    static @Nullable EntityType fromKey(@NotNull Key key) {
+    static @Nullable EntityType fromKey(Key key) {
         return EntityTypeImpl.REGISTRY.get(key);
     }
 
@@ -59,7 +71,7 @@ public sealed interface EntityType extends StaticProtocolObject<EntityType>, Ent
         return EntityTypeImpl.REGISTRY.get(id);
     }
 
-    static @NotNull Registry<EntityType> staticRegistry() {
+    static Registry<EntityType> staticRegistry() {
         return EntityTypeImpl.REGISTRY;
     }
 }
